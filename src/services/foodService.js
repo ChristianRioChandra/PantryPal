@@ -31,6 +31,13 @@ export const FoodType = {
   FREEZER: 'freezer',
 }
 
+export const QuantityLevel = {
+  LOW: 'low',
+  MEDIUM: 'medium',
+  HIGH: 'high',
+  FULL: 'full',
+}
+
 // ─── Add Food Item ────────────────────────────────────────────────────────────
 
 /**
@@ -48,6 +55,7 @@ export async function addFoodItem(uid, { name, quantity, unit, expiryDate, categ
     storage_location: storageLocation || null,
     notes: notes || null,
     status: FoodStatus.AVAILABLE,
+    quantity_level: QuantityLevel.FULL,
     created_at: serverTimestamp(),
   })
   return docRef.id
