@@ -5,6 +5,7 @@ import PantryPalDashboard from '../views/PantryPalDashboard.vue'
 import ManageInventory from '../views/ManageInventory.vue'
 import PantryPalDonationListing from '../views/PantryPalDonationListing.vue'
 import PantryPalWeeklyMealPlan from '../views/PantryPalWeeklyMealPlan.vue'
+import Settings from '../views/Settings.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -41,8 +42,12 @@ const router = createRouter({
       name: 'inventory',
       component: ManageInventory,
     },
+    {
+      path: '/settings',
+      name: 'settings',
+      component: Settings,
+    },
     // analytics
-    // settings
   ],
 })
 
