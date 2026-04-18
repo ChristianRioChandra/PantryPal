@@ -1,3 +1,4 @@
+<!-- src/components/BaseSidebar.vue -->
 <template>
   <aside class="sidebar">
     <div class="logo-area">
@@ -14,7 +15,8 @@
         :class="{ active: isActive(item.route) }"
         @click="navigateTo(item.route)"
       >
-        <i :class="item.icon"></i>
+        <i v-if="item.icon" :class="item.icon"></i>
+        <span v-else class="nav-dot"></span>
         <span>{{ item.label }}</span>
       </div>
     </nav>
@@ -28,17 +30,20 @@ import { useRouter, useRoute } from 'vue-router'
 export interface NavItem {
   label: string
   route: string
-  icon: string
+  icon?: string // optional; if missing, uses nav-dot
 }
 
-withDefaults(defineProps<{
-  navItems: NavItem[]
-  appName?: string
-  logoIcon?: string
-}>(), {
-  appName: 'PantryPal',
-  logoIcon: 'bi bi-cup-straw'
-})
+withDefaults(
+  defineProps<{
+    navItems: NavItem[]
+    appName?: string
+    logoIcon?: string
+  }>(),
+  {
+    appName: 'PantryPal',
+    logoIcon: 'bi bi-cup-straw',
+  },
+)
 
 const router = useRouter()
 const route = useRoute()
@@ -123,5 +128,17 @@ const navigateTo = (routePath: string) => router.push(routePath)
 hr {
   margin: 28px 0 0;
   border-top: 1px solid #e9edf2;
+}
+
+.nav-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-border-secondary, #d1d5db);
+  flex-shrink: 0;
+  margin-right: 8px;
+}
+.nav-item.active .nav-dot {
+  background: #1d9e75;
 }
 </style>

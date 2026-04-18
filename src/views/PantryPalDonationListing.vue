@@ -1,38 +1,21 @@
 <template>
-  <div class="sp-wrap">
-    <!-- Sidebar -->
-    <aside class="sidebar">
-      <div class="logo">🌿 PantryPal</div>
-      <nav>
-        <div
-          v-for="item in navItems"
-          :key="item.label"
-          class="nav-item"
-          :class="{ active: item.active }"
-          @click="navigateTo(item.route)"
+  <div class="donation-page">
+    <div class="dashboard">
+      <BaseSidebar :nav-items="navItems" />
+
+      <div class="main-content">
+        <BaseTopbar
+          title="Donations"
+          search-placeholder="Search by item, category, location..."
+          v-model:search-value="searchQuery"
         >
-          <span class="nav-dot"></span>
-          {{ item.label }}
-        </div>
-      </nav>
-    </aside>
+          <template #actions>
+            <i class="bi bi-bell"></i>
+            <i class="bi bi-gear"></i>
+            <i class="bi bi-box-arrow-right"></i>
+          </template>
+        </BaseTopbar>
 
-    <!-- Main Content -->
-    <main class="main">
-      <!-- Topbar -->
-      <header class="topbar">
-        <span class="topbar-logo">🌿 SavePlate</span>
-        <div style="flex: 1"></div>
-        <button class="tb-btn position-relative">
-          Notifications
-          <span class="badge">2</span>
-        </button>
-        <button class="tb-btn">Settings</button>
-        <button class="tb-btn">Log out</button>
-      </header>
-
-      <!-- Content Area -->
-      <div class="content">
         <!-- Hero Banner -->
         <div class="hero-banner">
           <div class="hero-icon">🤝</div>
@@ -41,77 +24,101 @@
             <p>Post your surplus items or find available donations near you. Every share counts.</p>
           </div>
           <div class="hero-nav">
-            <button class="hero-nav-btn">‹</button>
-            <button class="hero-nav-btn">›</button>
+            <button class="hero-nav-btn"><i class="bi bi-chevron-left"></i></button>
+            <button class="hero-nav-btn"><i class="bi bi-chevron-right"></i></button>
           </div>
         </div>
 
         <!-- Recent Listings Section -->
-        <div class="recent-section">
+        <section class="section">
           <div class="section-header">
-            <span class="section-title">Recent Listings</span>
+            <h3>Recent Listings</h3>
           </div>
           <div class="cards-grid">
-            <div v-for="item in recentListings" :key="item.id" class="d-card">
-              <div class="d-card-top">
-                <span class="d-card-title">{{ item.title }}</span>
-                <div class="d-card-check"></div>
+            <div v-for="item in recentListings" :key="item.id" class="donation-card">
+              <div class="card-top">
+                <span class="card-title">{{ item.title }}</span>
+                <div class="card-check"></div>
               </div>
-              <div class="d-card-tags">
+              <div class="card-tags">
                 <span v-for="tag in item.tags" :key="tag.label" class="tag" :class="tag.variant">
                   {{ tag.label }}
                 </span>
               </div>
-              <div class="d-card-desc">{{ item.description }}</div>
-              <div class="d-card-actions">
-                <div class="d-action">Details</div>
-                <div class="d-action primary">Claim</div>
+              <div class="card-desc">{{ item.description }}</div>
+              <div class="card-actions">
+                <button class="action-btn">Details</button>
+                <button class="action-btn primary">Claim</button>
               </div>
             </div>
           </div>
           <button class="browse-all-btn">Browse All Donations →</button>
-        </div>
+        </section>
 
         <!-- Browse All Section -->
-        <div class="section-header">
-          <span class="section-title">Browse Donations</span>
-        </div>
-        <div class="search-bar-row">
-          <input
-            v-model="searchQuery"
-            placeholder="Search by item name, category, location..."
-            class="form-control form-control-sm"
-          />
-          <button class="filter-btn">Sort</button>
-          <button class="filter-btn">Filter</button>
-        </div>
-
-        <div class="cards-grid">
-          <div v-for="item in filteredListings" :key="item.id" class="d-card">
-            <div class="d-card-top">
-              <span class="d-card-title">{{ item.title }}</span>
-              <div class="d-card-check"></div>
-            </div>
-            <div class="d-card-tags">
-              <span v-for="tag in item.tags" :key="tag.label" class="tag" :class="tag.variant">
-                {{ tag.label }}
-              </span>
-            </div>
-            <div class="d-card-desc">{{ item.description }}</div>
-            <div class="d-card-actions">
-              <div class="d-action">Details</div>
-              <div class="d-action primary">Claim</div>
+        <section class="section">
+          <div class="section-header">
+            <h3>Browse Donations</h3>
+            <div class="filter-sort">
+              <button class="filter-btn" @click="cycleSort">
+                <i class="bi bi-arrow-down-up"></i> Sort: {{ sortLabel }}
+              </button>
+              <button class="filter-btn" @click="cycleFilter">
+                <i class="bi bi-funnel"></i> Filter: {{ filterLabel }}
+              </button>
             </div>
           </div>
-        </div>
+          <div class="cards-grid">
+            <div v-for="item in filteredListings" :key="item.id" class="donation-card">
+              <div class="card-top">
+                <span class="card-title">{{ item.title }}</span>
+                <div class="card-check"></div>
+              </div>
+              <div class="card-tags">
+                <span v-for="tag in item.tags" :key="tag.label" class="tag" :class="tag.variant">
+                  {{ tag.label }}
+                </span>
+              </div>
+              <div class="card-desc">{{ item.description }}</div>
+              <div class="card-actions">
+                <button class="action-btn">Details</button>
+                <button class="action-btn primary">Claim</button>
+              </div>
+            </div>
+          </div>
+        </section>
       </div>
-    </main>
+
+      <BaseRightSidebar
+        quick-actions-title="Donation Actions"
+        :total-items="allListings.length"
+        :expiring-soon="expiringSoonCount"
+      >
+        <template #quick-actions>
+          <button class="right-btn"><i class="bi bi-plus-circle"></i> Post Donation</button>
+          <button class="right-btn"><i class="bi bi-geo-alt"></i> Set Pickup Location</button>
+        </template>
+        <template #stats>
+          <div class="stat-item">
+            <span>Active donations</span>
+            <strong>{{ allListings.length }}</strong>
+          </div>
+          <div class="stat-item">
+            <span>Nearby requests</span>
+            <strong>12</strong>
+          </div>
+        </template>
+      </BaseRightSidebar>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { useRouter } from 'vue-router'
+import BaseSidebar from '@/components/BaseSidebar.vue'
+import BaseTopbar from '@/components/BaseTopbar.vue'
+import BaseRightSidebar from '@/components/BaseRightSidebar.vue'
+import type { NavItem } from '@/components/BaseSidebar.vue'
 
 interface Tag {
   label: string
@@ -123,20 +130,21 @@ interface DonationItem {
   title: string
   tags: Tag[]
   description: string
+  expiryDays?: number
 }
 
-const router = useRouter()
-
-const navItems = ref([
-  { label: 'Dashboard', active: false, route: '/', icon: 'bi bi-graph-up' },
-  { label: 'Inventory', active: false, route: '/inventory', icon: 'bi bi-box-seam' },
-  { label: 'Meal Plan', active: false, route: '/meal-plan', icon: 'bi bi-calendar' },
-  { label: 'Donation', active: true, route: '/donations', icon: 'bi bi-heart' },
-  { label: 'Analytics', active: false, route: '/analytics', icon: 'bi bi-pie-chart' },
-  { label: 'Settings', active: false, route: '/settings', icon: 'bi bi-gear' },
-])
+const navItems: NavItem[] = [
+  { label: 'Dashboard', route: '/', icon: 'bi bi-graph-up' },
+  { label: 'Inventory', route: '/inventory', icon: 'bi bi-box-seam' },
+  { label: 'Meal Plan', route: '/meal-plan', icon: 'bi bi-calendar' },
+  { label: 'Donation', route: '/donations', icon: 'bi bi-heart' },
+  { label: 'Analytics', route: '/analytics', icon: 'bi bi-pie-chart' },
+  { label: 'Settings', route: '/settings', icon: 'bi bi-gear' },
+]
 
 const searchQuery = ref('')
+const currentSort = ref<'name' | 'expiry'>('name')
+const currentFilter = ref<'all' | 'near-expiry'>('all')
 
 const recentListings = ref<DonationItem[]>([
   {
@@ -144,12 +152,14 @@ const recentListings = ref<DonationItem[]>([
     title: 'Susu UltraMilk · 500ml Original',
     tags: [{ label: 'Exp: 6 Apr', variant: 'warn' }, { label: 'Dairy' }, { label: '500ml' }],
     description: 'Full box, unopened. Pickup in Denpasar Selatan, available mornings.',
+    expiryDays: 2,
   },
   {
     id: 2,
     title: 'Susu UltraMilk · 500ml Original',
     tags: [{ label: 'Fresh', variant: 'green' }, { label: 'Dairy' }, { label: '500ml' }],
     description: '2 boxes available. Can deliver nearby or pickup at gate.',
+    expiryDays: 5,
   },
 ])
 
@@ -163,6 +173,7 @@ const allListings = ref<DonationItem[]>([
       { label: 'Active', variant: 'green' },
     ],
     description: 'Unopened, pickup Kerobokan. Available 8am–12pm.',
+    expiryDays: 2,
   },
   {
     id: 4,
@@ -173,6 +184,7 @@ const allListings = ref<DonationItem[]>([
       { label: 'Active', variant: 'green' },
     ],
     description: '3 cartons. Contact via WhatsApp for pickup schedule.',
+    expiryDays: 2,
   },
   {
     id: 5,
@@ -183,353 +195,86 @@ const allListings = ref<DonationItem[]>([
       { label: 'Active', variant: 'green' },
     ],
     description: 'Farm fresh eggs, pickup Ubud area only.',
+    expiryDays: 7,
   },
   {
     id: 6,
     title: 'Roti Tawar · 1 Loaf',
     tags: [{ label: 'Exp: Today', variant: 'warn' }, { label: 'Bread' }],
     description: 'Half loaf remaining. Free, please take today.',
+    expiryDays: 0,
   },
 ])
 
 const filteredListings = computed(() => {
-  if (!searchQuery.value) return allListings.value
-  const q = searchQuery.value.toLowerCase()
-  return allListings.value.filter(
-    (item) =>
-      item.title.toLowerCase().includes(q) ||
-      item.description.toLowerCase().includes(q) ||
-      item.tags.some((tag) => tag.label.toLowerCase().includes(q)),
-  )
+  let items = [...allListings.value]
+
+  if (searchQuery.value) {
+    const q = searchQuery.value.toLowerCase()
+    items = items.filter(
+      (item) =>
+        item.title.toLowerCase().includes(q) ||
+        item.description.toLowerCase().includes(q) ||
+        item.tags.some((tag) => tag.label.toLowerCase().includes(q)),
+    )
+  }
+
+  if (currentFilter.value === 'near-expiry') {
+    items = items.filter((item) => (item.expiryDays ?? 999) <= 3)
+  }
+
+  items.sort((a, b) => {
+    if (currentSort.value === 'expiry') {
+      return (a.expiryDays ?? 999) - (b.expiryDays ?? 999)
+    }
+    return a.title.localeCompare(b.title)
+  })
+
+  return items
 })
 
-const navigateTo = (route: string) => {
-  router.push(route)
+const expiringSoonCount = computed(() => {
+  return allListings.value.filter((item) => item.expiryDays !== undefined && item.expiryDays <= 3)
+    .length
+})
+
+const sortLabel = computed(() => (currentSort.value === 'name' ? 'Name' : 'Expiry'))
+const filterLabel = computed(() => (currentFilter.value === 'all' ? 'All' : 'Near Expiry'))
+
+const cycleSort = () => {
+  currentSort.value = currentSort.value === 'name' ? 'expiry' : 'name'
+}
+
+const cycleFilter = () => {
+  currentFilter.value = currentFilter.value === 'all' ? 'near-expiry' : 'all'
 }
 </script>
 
 <style scoped>
-@import '../assets/variables.css';
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 
-* {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
-
-.sp-wrap {
-  display: flex;
+.donation-page {
+  background: #eef2f8;
+  font-family: 'Inter', sans-serif;
+  color: #0a1c2f;
   min-height: 100vh;
-  background: var(--color-background-tertiary);
+  padding: 24px 20px;
 }
 
-.sidebar {
-  width: 180px;
-  min-width: 180px;
-  background: var(--color-background-primary);
-  border-right: 0.5px solid var(--color-border-tertiary);
-  display: flex;
-  flex-direction: column;
-  padding: 1rem 0;
-}
-
-.sidebar .logo {
-  padding: 0.5rem 1rem 1.5rem;
-  font-size: 15px;
-  font-weight: 500;
-  color: var(--color-text-primary);
-  border-bottom: 0.5px solid var(--color-border-tertiary);
-  margin-bottom: 0.75rem;
-}
-
-.nav-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 0.5rem 1rem;
-  font-size: 13px;
-  color: var(--color-text-secondary);
-  cursor: pointer;
-  transition: background 0.15s;
-}
-
-.nav-item:hover {
-  background: var(--color-background-secondary);
-}
-
-.nav-item.active {
-  background: var(--color-background-secondary);
-  color: var(--color-text-primary);
-  font-weight: 500;
-}
-
-.nav-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--color-border-secondary);
-  flex-shrink: 0;
-}
-
-.nav-item.active .nav-dot {
-  background: #1d9e75;
-}
-
-.main {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.topbar {
-  background: var(--color-background-primary);
-  border-bottom: 0.5px solid var(--color-border-tertiary);
-  padding: 0.6rem 1.25rem;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.topbar-logo {
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--color-text-primary);
-}
-
-.tb-btn {
-  padding: 5px 12px;
-  font-size: 12px;
-  border: 0.5px solid var(--color-border-secondary);
-  border-radius: var(--border-radius-md);
-  background: var(--color-background-primary);
-  color: var(--color-text-secondary);
-  cursor: pointer;
-  position: relative;
-}
-
-.badge {
-  position: absolute;
-  top: -4px;
-  right: -4px;
-  width: 16px;
-  height: 16px;
-  background: #d85a30;
-  border-radius: 50%;
-  font-size: 10px;
-  color: #fff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.content {
-  padding: 1.25rem;
-  overflow-y: auto;
-  flex: 1;
-}
-
-.hero-banner {
-  background: var(--color-background-primary);
-  border: 0.5px solid var(--color-border-tertiary);
-  border-radius: var(--border-radius-lg);
-  padding: 1.25rem;
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  margin-bottom: 1rem;
-}
-
-.hero-icon {
-  width: 56px;
-  height: 56px;
-  border-radius: var(--border-radius-lg);
-  background: #e1f5ee;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 24px;
-  flex-shrink: 0;
-}
-
-.hero-text h2 {
-  font-size: 17px;
-  font-weight: 500;
-  color: var(--color-text-primary);
-}
-
-.hero-text p {
-  font-size: 12px;
-  color: var(--color-text-secondary);
-  margin-top: 3px;
-}
-
-.hero-nav {
-  margin-left: auto;
-  display: flex;
-  gap: 8px;
-}
-
-.hero-nav-btn {
-  background: none;
-  border: 0.5px solid var(--color-border-secondary);
-  border-radius: var(--border-radius-md);
-  width: 28px;
-  height: 28px;
-  cursor: pointer;
-  font-size: 16px;
-  color: var(--color-text-secondary);
-}
-
-.recent-section {
-  margin-bottom: 1rem;
-}
-
-.section-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 0.6rem;
-}
-
-.section-title {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--color-text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.browse-all-btn {
-  padding: 6px 16px;
-  font-size: 12px;
-  border: 0.5px solid var(--color-border-secondary);
-  border-radius: var(--border-radius-md);
-  background: var(--color-background-primary);
-  color: var(--color-text-secondary);
-  cursor: pointer;
-  display: block;
-  text-align: center;
-  margin: 0.75rem auto 0;
-}
-
-.search-bar-row {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 1rem;
-}
-
-.search-bar-row input {
-  flex: 1;
-  padding: 7px 12px;
-  border: 0.5px solid var(--color-border-tertiary);
-  border-radius: var(--border-radius-md);
-  font-size: 13px;
-  background: var(--color-background-secondary);
-  color: var(--color-text-primary);
-}
-
-.filter-btn {
-  padding: 7px 14px;
-  font-size: 12px;
-  border: 0.5px solid var(--color-border-secondary);
-  border-radius: var(--border-radius-md);
-  background: var(--color-background-primary);
-  color: var(--color-text-secondary);
-  cursor: pointer;
-}
-
-.cards-grid {
+.dashboard {
+  max-width: 1760px;
+  margin: 0 auto;
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
+  grid-template-columns: clamp(220px, 16vw, 256px) minmax(0, 1fr) clamp(232px, 18vw, 276px);
+  gap: clamp(18px, 2vw, 28px);
+  align-items: start;
 }
 
-.d-card {
-  background: var(--color-background-primary);
-  border: 0.5px solid var(--color-border-tertiary);
-  border-radius: var(--border-radius-lg);
-  padding: 0.9rem;
+.main-content {
+  min-width: 0;
 }
 
-.d-card-top {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  margin-bottom: 0.5rem;
-}
-
-.d-card-title {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--color-text-primary);
-}
-
-.d-card-check {
-  width: 16px;
-  height: 16px;
-  border: 1.5px solid var(--color-border-secondary);
-  border-radius: 3px;
-  flex-shrink: 0;
-}
-
-.d-card-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  margin-bottom: 0.5rem;
-}
-
-.tag {
-  font-size: 10px;
-  padding: 2px 7px;
-  border-radius: 20px;
-  border: 0.5px solid var(--color-border-tertiary);
-  color: var(--color-text-secondary);
-}
-
-.tag.green {
-  background: #e1f5ee;
-  color: #0f6e56;
-  border-color: #9fe1cb;
-}
-
-.tag.warn {
-  background: #faeeda;
-  color: #854f0b;
-  border-color: #fac775;
-}
-
-.d-card-desc {
-  font-size: 11px;
-  color: var(--color-text-secondary);
-  margin-bottom: 0.5rem;
-  line-height: 1.5;
-}
-
-.d-card-actions {
-  display: flex;
-  gap: 6px;
-}
-
-.d-action {
-  flex: 1;
-  padding: 5px;
-  font-size: 11px;
-  text-align: center;
-  border: 0.5px solid var(--color-border-secondary);
-  border-radius: var(--border-radius-md);
-  cursor: pointer;
-  background: var(--color-background-secondary);
-  color: var(--color-text-secondary);
-}
-
-.d-action.primary {
-  background: #1d9e75;
-  color: #fff;
-  border-color: #1d9e75;
-}
-
+/* Hero Banner */
 .hero-banner {
   background: linear-gradient(135deg, #e0f2e9 0%, #ffffff 100%);
   border-radius: 34px;
@@ -557,6 +302,7 @@ const navigateTo = (route: string) => {
   font-size: 1.8rem;
   font-weight: 700;
   margin-bottom: 8px;
+  color: #0a1c2f;
 }
 
 .hero-text p {
@@ -578,8 +324,17 @@ const navigateTo = (route: string) => {
   border-radius: 14px;
   cursor: pointer;
   color: #5f7f9e;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: 0.2s;
 }
 
+.hero-nav-btn:hover {
+  background: #f3f6fb;
+}
+
+/* Sections */
 .section {
   margin-bottom: 36px;
 }
@@ -594,6 +349,7 @@ const navigateTo = (route: string) => {
 .section-header h3 {
   font-size: 1.4rem;
   font-weight: 700;
+  color: #0a1c2f;
 }
 
 .filter-sort {
@@ -607,9 +363,20 @@ const navigateTo = (route: string) => {
   padding: 8px 16px;
   border-radius: 40px;
   font-weight: 500;
+  font-size: 0.9rem;
+  color: #2c3e4e;
   cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: 0.2s;
 }
 
+.filter-btn:hover {
+  background: #e2e8f0;
+}
+
+/* Cards Grid */
 .cards-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
@@ -640,6 +407,7 @@ const navigateTo = (route: string) => {
 .card-title {
   font-weight: 700;
   font-size: 1.1rem;
+  color: #0a1c2f;
 }
 
 .card-check {
@@ -647,6 +415,7 @@ const navigateTo = (route: string) => {
   height: 22px;
   border: 2px solid #d1dbe8;
   border-radius: 6px;
+  cursor: pointer;
 }
 
 .card-tags {
@@ -694,6 +463,8 @@ const navigateTo = (route: string) => {
   border: 1px solid #e2e8f0;
   background: white;
   font-weight: 600;
+  font-size: 0.9rem;
+  color: #2c3e4e;
   cursor: pointer;
   transition: 0.2s;
 }
@@ -708,6 +479,10 @@ const navigateTo = (route: string) => {
   background: #1f5e3a;
 }
 
+.action-btn:hover {
+  background: #f3f6fb;
+}
+
 .browse-all-btn {
   display: block;
   margin: 24px auto 0;
@@ -718,10 +493,92 @@ const navigateTo = (route: string) => {
   border-radius: 40px;
   font-weight: 600;
   cursor: pointer;
+  transition: 0.2s;
 }
 
+.browse-all-btn:hover {
+  background: #e0f2e9;
+}
+
+/* Right Sidebar specific overrides */
 .right-btn.primary {
   background: #2c7a4d;
   color: white;
+}
+
+.right-btn.primary:hover {
+  background: #1f5e3a;
+}
+
+.stat-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-bottom: 1px solid #edf2f7;
+}
+
+.stat-item:last-child {
+  border-bottom: none;
+}
+
+.stat-item strong {
+  color: #0a1c2f;
+}
+
+/* Responsive */
+@media (max-width: 1120px) {
+  .dashboard {
+    grid-template-columns: 232px minmax(0, 1fr);
+  }
+  .right-sidebar {
+    grid-column: 1 / -1;
+    position: static;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  }
+}
+
+@media (max-width: 920px) {
+  .dashboard {
+    grid-template-columns: 1fr;
+  }
+  .sidebar,
+  .right-sidebar {
+    position: static;
+  }
+  .cards-grid {
+    grid-template-columns: 1fr;
+  }
+  .hero-banner {
+    flex-direction: column;
+    text-align: center;
+  }
+  .hero-nav {
+    margin-left: 0;
+  }
+}
+.right-btn {
+  background: #f3f6fb;
+  border: none;
+  padding: 13px 16px;
+  border-radius: 40px;
+  font-size: 0.95rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: 0.2s;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #2c3e4e;
+}
+
+.right-btn:hover {
+  background: #e2e8f0;
+}
+
+.right-btn i {
+  width: 20px;
+  color: #2c7a4d;
 }
 </style>

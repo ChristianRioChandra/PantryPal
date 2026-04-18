@@ -1,154 +1,165 @@
 <template>
-  <div class="sp-wrap">
-    <!-- Sidebar -->
-    <aside class="sidebar">
-      <div class="logo">🌿 PantryPal</div>
-      <nav>
-        <div
-          v-for="item in navItems"
-          :key="item.label"
-          class="nav-item"
-          :class="{ active: item.active }"
-          @click="navigateTo(item.route)"
+  <div class="weekly-meal-page">
+    <div class="dashboard">
+      <BaseSidebar :nav-items="navItems" />
+
+      <div class="main-content">
+        <BaseTopbar2
+          title="Meal Plan"
+          search-placeholder="Search meals or ingredients..."
+          v-model:search-value="mealSearch"
         >
-          <span class="nav-dot"></span>
-          {{ item.label }}
-        </div>
-      </nav>
-    </aside>
+          <template #actions>
+            <i class="bi bi-bell"></i>
+            <i class="bi bi-gear"></i>
+            <i class="bi bi-box-arrow-right"></i>
+          </template>
+        </BaseTopbar2>
 
-    <!-- Main Content -->
-    <main class="main">
-      <!-- Topbar -->
-      <header class="topbar">
-        <span class="logo-text">🌿 SavePlate</span>
-        <div style="flex: 1"></div>
-        <button class="tb-btn position-relative">
-          Notifications
-          <span class="badge">2</span>
-        </button>
-        <button class="tb-btn">Settings</button>
-        <button class="tb-btn">Log out</button>
-      </header>
-
-      <!-- Content Grid -->
-      <div class="content">
-        <!-- Calendar Card -->
-        <div class="card cal-card">
-          <div class="cal-header">
-            <button class="cal-nav" @click="prevMonth">‹</button>
-            <span class="cal-month">{{ currentMonthYear }}</span>
-            <button class="cal-nav" @click="nextMonth">›</button>
-          </div>
-          <div class="cal-grid">
-            <div v-for="day in dayLabels" :key="day" class="cal-day-label">
-              {{ day }}
+        <!-- Content Grid -->
+        <div class="content-grid">
+          <!-- Calendar Card -->
+          <div class="dashboard-card cal-card">
+            <div class="card-header">
+              <i class="bi bi-calendar3"></i>
+              <span>Calendar</span>
             </div>
-            <div
-              v-for="day in calendarDays"
-              :key="day.dateKey"
-              class="cal-day"
-              :class="{
-                'other-month': !day.isCurrentMonth,
-                today: day.isToday,
-                selected: day.isSelected,
-              }"
-              @click="selectDate(day.date)"
-            >
-              {{ day.dayOfMonth }}
-            </div>
-          </div>
-        </div>
-
-        <!-- Meal Detail Card -->
-        <div class="card meal-detail-card">
-          <div class="meal-date-title">{{ formattedSelectedDate }}</div>
-          <div v-for="slot in mealSlots" :key="slot.type" class="meal-slot">
-            <div class="meal-slot-header">{{ slot.label }}</div>
-            <div class="meal-slot-body">
-              <span v-if="slot.meal" class="meal-name">{{ slot.meal }}</span>
-              <span v-else class="meal-empty">Not planned yet</span>
-              <button class="meal-edit-btn">
-                {{ slot.meal ? 'Edit' : '+ Add' }}
+            <div class="cal-header">
+              <button class="cal-nav" @click="prevMonth"><i class="bi bi-chevron-left"></i></button>
+              <span class="cal-month">{{ currentMonthYear }}</span>
+              <button class="cal-nav" @click="nextMonth">
+                <i class="bi bi-chevron-right"></i>
               </button>
             </div>
-          </div>
-          <div class="meal-actions">
-            <button class="meal-action-btn">Create Meal</button>
-            <button class="meal-action-btn primary">Browse Recommendation</button>
-          </div>
-          <button class="save-btn">Save</button>
-        </div>
-
-        <!-- Inventory Card -->
-        <div class="card inv-card">
-          <div class="card-title">Inventory</div>
-          <div class="inv-search-row">
-            <input
-              v-model="inventorySearch"
-              placeholder="Search items..."
-              class="form-control form-control-sm"
-            />
-            <button class="filter-btn-sm">Filter</button>
-          </div>
-          <div v-for="item in filteredInventory" :key="item.id" class="inv-item">
-            <div class="inv-icon">{{ item.icon }}</div>
-            <div class="inv-info">
-              <div class="inv-name">{{ item.name }}</div>
-              <div class="inv-sub">{{ item.location }} · Exp: {{ item.expiry }}</div>
+            <div class="cal-grid">
+              <div v-for="day in dayLabels" :key="day" class="cal-day-label">{{ day }}</div>
+              <div
+                v-for="day in calendarDays"
+                :key="day.dateKey"
+                class="cal-day"
+                :class="{
+                  'other-month': !day.isCurrentMonth,
+                  today: day.isToday,
+                  selected: day.isSelected,
+                }"
+                @click="selectDate(day.date)"
+              >
+                {{ day.dayOfMonth }}
+              </div>
             </div>
-            <span v-if="item.warning" class="inv-tag warn">{{ item.tag }}</span>
-            <button class="inv-add-btn">Add</button>
           </div>
-        </div>
 
-        <!-- Create Meal & Recommendations -->
-        <div class="create-card">
-          <div class="create-inner">
-            <div class="card-title">Create New Meal</div>
-            <div class="form-field">
-              <label>Meal name</label>
+          <!-- Meal Detail Card -->
+          <div class="dashboard-card meal-detail-card">
+            <div class="card-header">
+              <i class="bi bi-card-list"></i>
+              <span>{{ formattedSelectedDate }}</span>
+            </div>
+            <div v-for="slot in mealSlots" :key="slot.type" class="meal-slot">
+              <div class="meal-slot-header">{{ slot.label }}</div>
+              <div class="meal-slot-body">
+                <span v-if="slot.meal" class="meal-name">{{ slot.meal }}</span>
+                <span v-else class="meal-empty">Not planned yet</span>
+                <button class="meal-edit-btn">
+                  {{ slot.meal ? 'Edit' : '+ Add' }}
+                </button>
+              </div>
+            </div>
+            <div class="meal-actions">
+              <button class="card-action-btn">Create Meal</button>
+              <button class="card-action-btn primary">Browse Recommendations</button>
+            </div>
+            <button class="save-btn">Save Plan</button>
+          </div>
+
+          <!-- Inventory Card -->
+          <div class="dashboard-card inv-card">
+            <div class="card-header">
+              <i class="bi bi-box-seam"></i>
+              <span>Inventory</span>
+            </div>
+            <div class="inv-search-row">
               <input
-                v-model="newMealName"
-                placeholder="e.g. Nasi Goreng"
+                v-model="inventorySearch"
+                placeholder="Search items..."
                 class="form-control form-control-sm"
               />
+              <button class="filter-btn-sm">Filter</button>
             </div>
-            <div class="form-field">
-              <label>Ingredients used</label>
-              <div v-for="(ing, idx) in selectedIngredients" :key="idx" class="ingr-item">
-                {{ ing.icon }} {{ ing.name }}
-                <span
-                  style="margin-left: auto; color: #d85a30; cursor: pointer"
-                  @click="removeIngredient(idx)"
-                  >✕</span
-                >
+            <div class="inventory-list">
+              <div v-for="item in filteredInventory" :key="item.id" class="inventory-item">
+                <div class="inv-icon">{{ item.icon }}</div>
+                <div class="inv-info">
+                  <div class="inv-name">{{ item.name }}</div>
+                  <div class="inv-sub">{{ item.location }} · Exp: {{ item.expiry }}</div>
+                </div>
+                <span v-if="item.warning" class="inv-tag warn">{{ item.tag }}</span>
+                <button class="inv-add-btn">Add</button>
               </div>
-              <div class="add-ingr" @click="showIngredientSelector = true">+ Add ingredients</div>
             </div>
-            <button class="add-meal-btn" @click="addMeal">Add Meal</button>
           </div>
 
-          <div class="create-inner">
-            <div class="card-title">Recommendations</div>
-            <div v-for="rec in recommendations" :key="rec.id" class="reco-item">
-              <div class="reco-icon">{{ rec.icon }}</div>
-              <div class="reco-info">
-                <div class="reco-name">{{ rec.name }}</div>
-                <div class="reco-sub">Uses: {{ rec.uses }}</div>
+          <!-- Create Meal & Recommendations -->
+          <div class="create-card">
+            <div class="dashboard-card">
+              <div class="card-header">
+                <i class="bi bi-plus-circle"></i>
+                <span>Create New Meal</span>
               </div>
-              <button class="reco-add">+ Plan</button>
+              <div class="form-field">
+                <label>Meal name</label>
+                <input v-model="newMealName" placeholder="e.g. Nasi Goreng" class="form-control" />
+              </div>
+              <div class="form-field">
+                <label>Ingredients used</label>
+                <div v-for="(ing, idx) in selectedIngredients" :key="idx" class="ingr-item">
+                  {{ ing.icon }} {{ ing.name }}
+                  <span class="remove-ingr" @click="removeIngredient(idx)">✕</span>
+                </div>
+                <div class="add-ingr" @click="showIngredientSelector = true">+ Add ingredients</div>
+              </div>
+              <button class="card-action-btn primary" @click="addMeal">Add Meal</button>
+            </div>
+
+            <div class="dashboard-card">
+              <div class="card-header">
+                <i class="bi bi-lightbulb"></i>
+                <span>Recommendations</span>
+              </div>
+              <div v-for="rec in recommendations" :key="rec.id" class="reco-item">
+                <div class="reco-icon">{{ rec.icon }}</div>
+                <div class="reco-info">
+                  <div class="reco-name">{{ rec.name }}</div>
+                  <div class="reco-sub">Uses: {{ rec.uses }}</div>
+                </div>
+                <button class="reco-add">+ Plan</button>
+              </div>
             </div>
           </div>
         </div>
       </div>
-    </main>
+
+      <BaseRightSidebar
+        quick-actions-title="Meal Actions"
+        :total-items="inventoryItems.length"
+        :expiring-soon="inventoryItems.filter((i) => i.warning).length"
+      >
+        <template #quick-actions>
+          <button class="right-btn"><i class="bi bi-calendar-plus"></i> Plan Week</button>
+          <button class="right-btn"><i class="bi bi-cart"></i> Shopping List</button>
+          <button class="right-btn"><i class="bi bi-star"></i> Favorite Meals</button>
+        </template>
+      </BaseRightSidebar>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { useRouter } from 'vue-router'
+import BaseSidebar from '@/components/BaseSidebar.vue'
+import BaseTopbar2 from '@/components/BaseTopbar2.vue'
+import BaseRightSidebar from '@/components/BaseRightSidebar.vue'
+import type { NavItem } from '@/components/BaseSidebar.vue'
 
 interface InventoryItem {
   id: number
@@ -166,17 +177,6 @@ interface Recommendation {
   name: string
   uses: string
 }
-
-const router = useRouter()
-
-const navItems = ref([
-  { label: 'Dashboard', active: false, route: '/' },
-  { label: 'Inventory', active: false, route: '/inventory' },
-  { label: 'Meal Plan', active: true, route: '/meal-plan' },
-  { label: 'Donation', active: false, route: '/donations' },
-  { label: 'Analytics', active: false, route: '/analytics' },
-  { label: 'Settings', active: false, route: '/settings' },
-])
 
 // Calendar state
 const currentDate = ref(new Date(2026, 3, 14)) // April 14, 2026 (month index 3)
@@ -370,527 +370,488 @@ const recommendations = ref<Recommendation[]>([
   },
 ])
 
-const navigateTo = (route: string) => {
-  router.push(route)
-}
+// Make sure to define navItems with icons or without (use nav-dot)
+const navItems: NavItem[] = [
+  { label: 'Dashboard', route: '/', icon: 'bi bi-graph-up' },
+  { label: 'Inventory', route: '/inventory', icon: 'bi bi-box-seam' },
+  { label: 'Meal Plan', route: '/meal-plan', icon: 'bi bi-calendar' },
+  { label: 'Donation', route: '/donations', icon: 'bi bi-heart' },
+  { label: 'Analytics', route: '/analytics', icon: 'bi bi-pie-chart' },
+  { label: 'Settings', route: '/settings', icon: 'bi bi-gear' },
+]
+
+const mealSearch = ref('')
 </script>
 
 <style scoped>
-@import '../assets/variables.css';
-
-* {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
-
-.sp-wrap {
-  display: flex;
-  min-height: 100vh;
-  background: var(--color-background-tertiary);
-}
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 
 .sidebar {
-  width: 180px;
-  min-width: 180px;
-  background: var(--color-background-primary);
-  border-right: 0.5px solid var(--color-border-tertiary);
-  display: flex;
-  flex-direction: column;
-  padding: 1rem 0;
+  background: white;
+  border-radius: 34px;
+  box-shadow: 0 18px 45px rgba(31, 47, 62, 0.06);
+  padding: 34px 24px 26px;
+  position: sticky;
+  top: 24px;
 }
 
-.sidebar .logo {
-  padding: 0.5rem 1rem 1.5rem;
-  font-size: 15px;
-  font-weight: 500;
-  color: var(--color-text-primary);
-  border-bottom: 0.5px solid var(--color-border-tertiary);
-  margin-bottom: 0.75rem;
+.weekly-meal-page {
+  background: #eef2f8;
+  font-family: 'Inter', sans-serif;
+  color: #0a1c2f;
+  min-height: 100vh;
+  padding: 24px 20px;
 }
 
-.nav-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 0.5rem 1rem;
-  font-size: 13px;
-  color: var(--color-text-secondary);
-  cursor: pointer;
-  transition: background 0.15s;
+.dashboard {
+  max-width: 1760px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: clamp(220px, 16vw, 256px) minmax(0, 1fr) clamp(232px, 18vw, 276px);
+  gap: clamp(18px, 2vw, 28px);
+  align-items: start;
 }
 
-.nav-item:hover {
-  background: var(--color-background-secondary);
+.main-content {
+  min-width: 0;
 }
 
-.nav-item.active {
-  background: var(--color-background-secondary);
-  color: var(--color-text-primary);
-  font-weight: 500;
-}
-
-.nav-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--color-border-secondary);
-  flex-shrink: 0;
-}
-
-.nav-item.active .nav-dot {
-  background: #1d9e75;
-}
-
-.main {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.topbar {
-  background: var(--color-background-primary);
-  border-bottom: 0.5px solid var(--color-border-tertiary);
-  padding: 0.6rem 1.25rem;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.logo-text {
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--color-text-primary);
-}
-
-.tb-btn {
-  padding: 5px 12px;
-  font-size: 12px;
-  border: 0.5px solid var(--color-border-secondary);
-  border-radius: var(--border-radius-md);
-  background: var(--color-background-primary);
-  color: var(--color-text-secondary);
-  cursor: pointer;
-  position: relative;
-}
-
-.badge {
-  position: absolute;
-  top: -4px;
-  right: -4px;
-  width: 16px;
-  height: 16px;
-  background: #d85a30;
-  border-radius: 50%;
-  font-size: 10px;
-  color: #fff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.content {
-  padding: 1.25rem;
-  overflow-y: auto;
-  flex: 1;
+.content-grid {
   display: grid;
   grid-template-columns: 1fr 1.1fr;
   grid-template-rows: auto auto;
-  gap: 1rem;
+  gap: 20px;
 }
 
-.card {
-  background: var(--color-background-primary);
-  border: 0.5px solid var(--color-border-tertiary);
-  border-radius: var(--border-radius-lg);
-  padding: 1rem 1.25rem;
+.dashboard-card {
+  background: white;
+  border-radius: 28px;
+  padding: 24px;
+  box-shadow: 0 12px 30px rgba(31, 47, 62, 0.04);
+  border: 1px solid #e8eef7;
 }
 
-.card-title {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--color-text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  margin-bottom: 0.75rem;
+.card-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 1.1rem;
+  font-weight: 700;
+  margin-bottom: 20px;
+  color: #1e3a2f;
 }
 
-/* Calendar */
+.card-header i {
+  color: #2c7a4d;
+  font-size: 1.3rem;
+}
+
+/* Calendar specific */
 .cal-card {
   grid-column: 1/2;
   grid-row: 1/2;
 }
-
-.cal-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 0.75rem;
-}
-
-.cal-month {
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--color-text-primary);
-}
-
-.cal-nav {
-  background: none;
-  border: 0.5px solid var(--color-border-secondary);
-  border-radius: var(--border-radius-md);
-  width: 24px;
-  height: 24px;
-  cursor: pointer;
-  font-size: 14px;
-  color: var(--color-text-secondary);
-}
-
-.cal-grid {
-  display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  gap: 2px;
-}
-
-.cal-day-label {
-  text-align: center;
-  font-size: 10px;
-  color: var(--color-text-tertiary);
-  padding: 4px 0;
-  font-weight: 500;
-}
-
-.cal-day {
-  text-align: center;
-  font-size: 12px;
-  padding: 5px 2px;
-  border-radius: 6px;
-  cursor: pointer;
-  color: var(--color-text-secondary);
-}
-
-.cal-day:hover {
-  background: var(--color-background-secondary);
-}
-
-.cal-day.today {
-  background: #1d9e75;
-  color: #fff;
-  font-weight: 500;
-}
-
-.cal-day.selected {
-  background: #e1f5ee;
-  color: #0f6e56;
-  font-weight: 500;
-}
-
-.cal-day.other-month {
-  color: var(--color-text-tertiary);
-}
-
-/* Meal detail */
 .meal-detail-card {
   grid-column: 2/3;
   grid-row: 1/2;
 }
-
-.meal-date-title {
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--color-text-primary);
-  margin-bottom: 0.75rem;
-}
-
-.meal-slot {
-  border: 0.5px solid var(--color-border-tertiary);
-  border-radius: var(--border-radius-md);
-  margin-bottom: 8px;
-  overflow: hidden;
-}
-
-.meal-slot-header {
-  padding: 6px 10px;
-  background: var(--color-background-secondary);
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--color-text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.meal-slot-body {
-  padding: 8px 10px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.meal-name {
-  font-size: 13px;
-  color: var(--color-text-primary);
-}
-
-.meal-edit-btn {
-  font-size: 11px;
-  padding: 3px 10px;
-  border: 0.5px solid var(--color-border-secondary);
-  border-radius: var(--border-radius-md);
-  background: none;
-  cursor: pointer;
-  color: var(--color-text-secondary);
-}
-
-.meal-empty {
-  font-size: 12px;
-  color: var(--color-text-tertiary);
-  font-style: italic;
-}
-
-.meal-actions {
-  display: flex;
-  gap: 8px;
-  margin-top: 0.75rem;
-}
-
-.meal-action-btn {
-  flex: 1;
-  padding: 7px;
-  font-size: 12px;
-  text-align: center;
-  border: 0.5px solid var(--color-border-secondary);
-  border-radius: var(--border-radius-md);
-  cursor: pointer;
-  background: var(--color-background-secondary);
-  color: var(--color-text-secondary);
-}
-
-.meal-action-btn.primary {
-  background: #1d9e75;
-  color: #fff;
-  border-color: #1d9e75;
-}
-
-.save-btn {
-  display: block;
-  width: 100%;
-  margin-top: 0.5rem;
-  padding: 8px;
-  font-size: 13px;
-  font-weight: 500;
-  text-align: center;
-  background: #1d9e75;
-  color: #fff;
-  border: none;
-  border-radius: var(--border-radius-md);
-  cursor: pointer;
-}
-
-/* Inventory panel */
 .inv-card {
   grid-column: 1/2;
   grid-row: 2/3;
 }
-
-.inv-search-row {
-  display: flex;
-  gap: 6px;
-  margin-bottom: 0.75rem;
-}
-
-.inv-search-row input {
-  flex: 1;
-  padding: 6px 10px;
-  border: 0.5px solid var(--color-border-tertiary);
-  border-radius: var(--border-radius-md);
-  font-size: 12px;
-  background: var(--color-background-secondary);
-  color: var(--color-text-primary);
-}
-
-.filter-btn-sm {
-  padding: 6px 12px;
-  font-size: 11px;
-  border: 0.5px solid var(--color-border-secondary);
-  border-radius: var(--border-radius-md);
-  background: var(--color-background-primary);
-  color: var(--color-text-secondary);
-  cursor: pointer;
-}
-
-.inv-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 7px 0;
-  border-bottom: 0.5px solid var(--color-border-tertiary);
-}
-
-.inv-item:last-child {
-  border-bottom: none;
-}
-
-.inv-icon {
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
-  background: var(--color-background-secondary);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 12px;
-  flex-shrink: 0;
-}
-
-.inv-info {
-  flex: 1;
-}
-
-.inv-name {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--color-text-primary);
-}
-
-.inv-sub {
-  font-size: 10px;
-  color: var(--color-text-secondary);
-}
-
-.inv-add-btn {
-  font-size: 10px;
-  padding: 3px 8px;
-  border: 0.5px solid #1d9e75;
-  border-radius: var(--border-radius-md);
-  color: #1d9e75;
-  background: none;
-  cursor: pointer;
-}
-
-.inv-tag {
-  font-size: 10px;
-  padding: 2px 6px;
-  border-radius: 20px;
-}
-
-.inv-tag.warn {
-  background: #faeeda;
-  color: #854f0b;
-}
-
-/* Create meal + reco */
 .create-card {
   grid-column: 2/3;
   grid-row: 2/3;
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: 20px;
 }
 
-.create-inner {
-  background: var(--color-background-primary);
-  border: 0.5px solid var(--color-border-tertiary);
-  border-radius: var(--border-radius-lg);
-  padding: 1rem 1.25rem;
+/* Adapt existing calendar/meal styles to match dashboard card aesthetic */
+.cal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 15px;
+}
+.cal-nav {
+  background: #f3f6fb;
+  border: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  cursor: pointer;
+  color: #5f7f9e;
+}
+.cal-month {
+  font-weight: 600;
+}
+.cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+}
+.cal-day-label {
+  text-align: center;
+  font-size: 0.7rem;
+  color: #7e95b0;
+  padding: 4px 0;
+}
+.cal-day {
+  text-align: center;
+  font-size: 0.85rem;
+  padding: 6px 0;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.cal-day:hover {
+  background: #f3f6fb;
+}
+.cal-day.today {
+  background: #2c7a4d;
+  color: white;
+}
+.cal-day.selected {
+  background: #e1f5ee;
+  color: #0f6e56;
+  font-weight: 600;
+}
+.cal-day.other-month {
+  color: #b0c4de;
+}
+
+.meal-slot {
+  border: 1px solid #e8eef7;
+  border-radius: 16px;
+  margin-bottom: 12px;
+  overflow: hidden;
+}
+.meal-slot-header {
+  background: #f8fafc;
+  padding: 8px 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: #577190;
+}
+.meal-slot-body {
+  padding: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.meal-name {
+  font-weight: 500;
+}
+.meal-empty {
+  color: #9aafc4;
+  font-style: italic;
+}
+.meal-edit-btn {
+  background: none;
+  border: 1px solid #e2e8f0;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+.meal-actions {
+  display: flex;
+  gap: 10px;
+  margin: 16px 0;
+}
+.save-btn {
+  width: 100%;
+  background: #2c7a4d;
+  color: white;
+  border: none;
+  padding: 12px;
+  border-radius: 40px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.inv-search-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.inv-search-row input {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 40px;
+  background: #f8fafc;
+}
+.filter-btn-sm {
+  padding: 8px 14px;
+  background: #f3f6fb;
+  border: none;
+  border-radius: 40px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.inventory-list {
+  max-height: 300px;
+  overflow-y: auto;
+}
+.inventory-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid #edf2f7;
+}
+.inv-icon {
+  width: 36px;
+  height: 36px;
+  background: #f3f6fb;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.1rem;
+}
+.inv-info {
+  flex: 1;
+}
+.inv-name {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+.inv-sub {
+  font-size: 0.75rem;
+  color: #6883a8;
+}
+.inv-tag {
+  font-size: 0.7rem;
+  padding: 3px 8px;
+  border-radius: 20px;
+  background: #dcfce7;
+  color: #166534;
+}
+.inv-tag.warn {
+  background: #fef3c7;
+  color: #92400e;
+}
+.inv-add-btn {
+  font-size: 0.7rem;
+  padding: 4px 8px;
+  border: 1px solid #2c7a4d;
+  border-radius: 20px;
+  color: #2c7a4d;
+  background: none;
+  cursor: pointer;
 }
 
 .form-field {
-  margin-bottom: 0.6rem;
+  margin-bottom: 16px;
 }
-
 .form-field label {
-  font-size: 11px;
-  color: var(--color-text-secondary);
   display: block;
-  margin-bottom: 3px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #48617c;
+  margin-bottom: 4px;
 }
-
 .form-field input {
   width: 100%;
-  padding: 6px 10px;
-  border: 0.5px solid var(--color-border-tertiary);
-  border-radius: var(--border-radius-md);
-  font-size: 12px;
-  background: var(--color-background-secondary);
-  color: var(--color-text-primary);
+  padding: 10px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  background: #f8fafc;
 }
-
 .ingr-item {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 5px 8px;
-  border: 0.5px solid var(--color-border-tertiary);
-  border-radius: var(--border-radius-md);
-  margin-bottom: 4px;
-  font-size: 12px;
-  color: var(--color-text-secondary);
+  gap: 8px;
+  padding: 8px 12px;
+  background: #f3f6fb;
+  border-radius: 12px;
+  margin-bottom: 6px;
 }
-
+.remove-ingr {
+  margin-left: auto;
+  color: #d85a30;
+  cursor: pointer;
+}
 .add-ingr {
-  font-size: 12px;
-  color: #1d9e75;
+  color: #2c7a4d;
+  font-size: 0.85rem;
+  font-weight: 500;
   cursor: pointer;
-  margin-top: 4px;
-}
-
-.add-meal-btn {
-  width: 100%;
-  padding: 7px;
-  font-size: 12px;
-  background: #1d9e75;
-  color: #fff;
-  border: none;
-  border-radius: var(--border-radius-md);
-  cursor: pointer;
-  margin-top: 0.5rem;
+  margin-top: 8px;
 }
 
 .reco-item {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px;
-  border: 0.5px solid var(--color-border-tertiary);
-  border-radius: var(--border-radius-md);
-  margin-bottom: 6px;
+  gap: 12px;
+  padding: 12px;
+  background: #f8fafc;
+  border-radius: 16px;
+  margin-bottom: 8px;
 }
-
 .reco-icon {
-  width: 32px;
-  height: 32px;
-  border-radius: 6px;
+  width: 40px;
+  height: 40px;
   background: #e1f5ee;
+  border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 14px;
-  flex-shrink: 0;
+  font-size: 1.2rem;
 }
-
 .reco-info {
   flex: 1;
 }
-
 .reco-name {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--color-text-primary);
+  font-weight: 600;
 }
-
 .reco-sub {
-  font-size: 11px;
-  color: var(--color-text-secondary);
+  font-size: 0.75rem;
+  color: #6883a8;
 }
-
 .reco-add {
-  font-size: 11px;
   padding: 4px 10px;
-  border: 0.5px solid #1d9e75;
-  border-radius: var(--border-radius-md);
-  color: #1d9e75;
+  border: 1px solid #2c7a4d;
+  border-radius: 20px;
+  color: #2c7a4d;
   background: none;
   cursor: pointer;
-  flex-shrink: 0;
+  font-size: 0.75rem;
+}
+
+.card-action-btn {
+  padding: 10px 16px;
+  background: #f3f6fb;
+  border: none;
+  border-radius: 40px;
+  font-weight: 600;
+  color: #2c3e4e;
+  cursor: pointer;
+  flex: 1;
+}
+.card-action-btn.primary {
+  background: #2c7a4d;
+  color: white;
+}
+
+/* Responsive adjustments */
+@media (max-width: 1120px) {
+  .dashboard {
+    grid-template-columns: 232px minmax(0, 1fr);
+  }
+  .right-sidebar {
+    grid-column: 1 / -1;
+    position: static;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  }
+}
+@media (max-width: 920px) {
+  .dashboard {
+    grid-template-columns: 1fr;
+  }
+  .content-grid {
+    grid-template-columns: 1fr;
+  }
+  .cal-card,
+  .meal-detail-card,
+  .inv-card,
+  .create-card {
+    grid-column: auto;
+    grid-row: auto;
+  }
+}
+
+.logo-area {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 44px;
+  padding-left: 6px;
+}
+
+.logo-icon {
+  background: #2c7a4d;
+  width: 48px;
+  height: 48px;
+  border-radius: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 24px;
+}
+
+.logo-text {
+  font-weight: 800;
+  font-size: 1.55rem;
+  letter-spacing: -0.5px;
+  color: #1e3a2f;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 18px;
+  margin: 8px 0;
+  border-radius: 22px;
+  font-weight: 500;
+  font-size: 0.98rem;
+  color: #17304f;
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+.nav-item i {
+  width: 24px;
+  color: #6883a8;
+}
+
+.nav-item:hover {
+  background: #f5f9ff;
+}
+
+.nav-item.active {
+  background: #eef6ef;
+  color: #2c6e49;
+}
+
+.nav-item.active i {
+  color: #2c6e49;
+}
+
+hr {
+  margin: 28px 0 0;
+  border-top: 1px solid #e9edf2;
+}
+
+.right-btn {
+  background: #f3f6fb;
+  border: none;
+  padding: 13px 16px;
+  border-radius: 40px;
+  font-size: 0.95rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: 0.2s;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #2c3e4e;
+}
+
+.right-btn:hover {
+  background: #e2e8f0;
+}
+
+.right-btn i {
+  width: 20px;
+  color: #2c7a4d;
 }
 </style>

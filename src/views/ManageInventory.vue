@@ -196,39 +196,18 @@
     </div>
 
     <div class="dashboard">
-      <!-- Sidebar -->
-      <aside class="sidebar">
-        <div class="logo">🌿 PantryPal</div>
-        <nav>
-          <div
-            v-for="item in navItems"
-            :key="item.label"
-            class="nav-item"
-            :class="{ active: isActive(item.route) }"
-            @click="navigateTo(item.route)"
-          >
-            <span class="nav-dot"></span>
-            {{ item.label }}
-          </div>
-        </nav>
-      </aside>
+      <BaseSidebar :nav-items="navItems" />
 
       <div class="main-content">
-        <div class="top-bar">
-          <div class="page-title"><h2>Manage Inventory</h2></div>
-          <div class="top-bar-actions">
-            <div class="search-wrapper">
-              <i class="bi bi-search" style="-webkit-text-stroke: 1px currentColor"></i>
-              <input
-                type="text"
-                v-model="searchQuery"
-                placeholder="Search any food (milk, rice, ice cream...)"
-                autocomplete="off"
-              />
-            </div>
-            <div class="action-icons"><i class="bi bi-sliders"></i></div>
-          </div>
-        </div>
+        <BaseTopbar
+          title="Manage Inventory"
+          search-placeholder="Search any food (milk, rice, ice cream...)"
+          v-model:search-value="searchQuery"
+        >
+          <template #actions>
+            <i class="bi bi-sliders"></i>
+          </template>
+        </BaseTopbar>
 
         <!-- ALL CATEGORY -->
         <div
@@ -763,34 +742,19 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
+import BaseSidebar from '@/components/BaseSidebar.vue'
+import BaseTopbar from '@/components/BaseTopbar.vue'
+import type { NavItem } from '@/components/BaseSidebar.vue'
 
-// ---------- Navigation (same as other pages) ----------
-interface NavItem {
-  label: string
-  route: string
-}
-
-const router = useRouter()
-const route = useRoute()
-
-const navItems = ref<NavItem[]>([
-  { label: 'Dashboard', route: '/' },
-  { label: 'Inventory', route: '/inventory' },
-  { label: 'Meal Plan', route: '/meal-plan' },
-  { label: 'Donation', route: '/donations' },
-  { label: 'Analytics', route: '/analytics' },
-  { label: 'Settings', route: '/settings' },
-])
-
-const isActive = (itemRoute: string) => {
-  if (itemRoute === '/') return route.path === '/'
-  return route.path.startsWith(itemRoute)
-}
-
-const navigateTo = (routePath: string) => {
-  router.push(routePath)
-}
+// Navigation items
+const navItems: NavItem[] = [
+  { label: 'Dashboard', route: '/', icon: 'bi bi-graph-up' },
+  { label: 'Inventory', route: '/inventory', icon: 'bi bi-box-seam' },
+  { label: 'Meal Plan', route: '/meal-plan', icon: 'bi bi-calendar' },
+  { label: 'Donation', route: '/donations', icon: 'bi bi-heart' },
+  { label: 'Analytics', route: '/analytics', icon: 'bi bi-pie-chart' },
+  { label: 'Settings', route: '/settings', icon: 'bi bi-gear' },
+]
 
 // ---------- Inventory Data & Logic (converted from Options API) ----------
 interface InventoryItem {
@@ -1179,7 +1143,7 @@ function notifyMessage(msg: string) {
 </script>
 
 <style scoped>
-/* Your existing CSS goes here - copy all styles from the original file */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 * {
   margin: 0;
   padding: 0;
@@ -1201,130 +1165,6 @@ function notifyMessage(msg: string) {
   grid-template-columns: clamp(220px, 16vw, 256px) minmax(0, 1fr) clamp(232px, 18vw, 276px);
   gap: clamp(18px, 2vw, 28px);
   align-items: start;
-}
-
-/* SIDEBAR */
-.sidebar {
-  background: white;
-  border-radius: 34px;
-  box-shadow: 0 18px 45px rgba(31, 47, 62, 0.06);
-  padding: 34px 24px 26px;
-  position: sticky;
-  top: 24px;
-}
-
-.logo-area {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  margin-bottom: 44px;
-  padding-left: 6px;
-}
-.logo-icon {
-  background: #2c7a4d;
-  width: 48px;
-  height: 48px;
-  border-radius: 18px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: white;
-  font-size: 24px;
-}
-.logo-text {
-  font-weight: 800;
-  font-size: 1.55rem;
-  letter-spacing: -0.5px;
-  color: #1e3a2f;
-}
-.nav-item {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 14px 18px;
-  margin: 8px 0;
-  border-radius: 22px;
-  font-weight: 500;
-  font-size: 0.98rem;
-  color: #17304f;
-  cursor: default;
-  transition: 0.2s;
-}
-.nav-item i {
-  width: 24px;
-  color: #6883a8;
-}
-.nav-item.active {
-  background: #eef6ef;
-  color: #2c6e49;
-}
-.nav-item.active i {
-  color: #2c6e49;
-}
-hr {
-  margin: 28px 0 0;
-  border-top: 1px solid #e9edf2;
-}
-
-.main-content {
-  min-width: 0;
-}
-
-.top-bar {
-  background: white;
-  border-radius: 36px;
-  padding: 18px 30px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 16px;
-  margin-bottom: 28px;
-}
-.page-title h2 {
-  font-size: 2.15rem;
-  font-weight: 800;
-}
-.top-bar-actions {
-  display: flex;
-  gap: 16px;
-  align-items: center;
-  flex: 1;
-  min-width: min(100%, 420px);
-  justify-content: flex-end;
-}
-.search-wrapper {
-  display: flex;
-  align-items: center;
-  background: #f1f5f9;
-  border-radius: 60px;
-  padding: 0 18px;
-  gap: 10px;
-  min-width: min(100%, 360px);
-  min-height: 50px;
-}
-.search-wrapper i {
-  color: #6f89ad;
-  font-size: 1.25rem;
-}
-.search-wrapper input {
-  border: none;
-  background: transparent;
-  font-size: 0.95rem;
-  outline: none;
-  width: 100%;
-  font-family: 'Inter', sans-serif;
-}
-.action-icons {
-  display: flex;
-  gap: 22px;
-  font-size: 1.35rem;
-  color: #5f7f9e;
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  align-items: center;
-  justify-content: center;
 }
 
 /* Bulk bar */
@@ -1990,21 +1830,12 @@ footer {
 }
 
 @media (max-width: 1320px) {
-  .dashboard {
-    grid-template-columns: 232px minmax(0, 1fr) 248px;
-    gap: 22px;
-  }
-
   .food-grid {
     grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
   }
 }
 
 @media (max-width: 1120px) {
-  .dashboard {
-    grid-template-columns: 232px minmax(0, 1fr);
-  }
-
   .top-bar {
     padding: 18px 24px;
   }
@@ -2028,10 +1859,6 @@ footer {
 }
 
 @media (max-width: 920px) {
-  .dashboard {
-    grid-template-columns: 1fr;
-  }
-
   .sidebar,
   .right-sidebar {
     position: static;
@@ -2066,11 +1893,6 @@ footer {
 @media (max-width: 780px) {
   .manage-inventory-page {
     padding: 14px;
-  }
-
-  .dashboard {
-    grid-template-columns: 1fr;
-    gap: 18px;
   }
 
   .sidebar {
