@@ -249,7 +249,8 @@
               type="button"
               class="layout-toggle-btn"
               :class="{ active: inventoryLayout === 'cards' }"
-              @click="inventoryLayout = 'cards'"
+              :aria-pressed="inventoryLayout === 'cards'"
+              @click="setInventoryLayout('cards')"
             >
               <i class="bi bi-grid"></i>
               Detailed
@@ -258,7 +259,8 @@
               type="button"
               class="layout-toggle-btn"
               :class="{ active: inventoryLayout === 'compact' }"
-              @click="inventoryLayout = 'compact'"
+              :aria-pressed="inventoryLayout === 'compact'"
+              @click="setInventoryLayout('compact')"
             >
               <i class="bi bi-columns-gap"></i>
               Compact
@@ -897,7 +899,7 @@
                   v-if="getNearExpiryItems().length === 0"
                   style="padding: 20px; text-align: center; color: #7e95b0"
                 >
-                  ✨ No items near expiry! Great job managing food.
+                  No items near expiry! keep up the good work managing your food.
                 </div>
               </div>
             </div>
@@ -1324,13 +1326,13 @@ function getSortLabel(sort: string): string {
 function cycleFilterMode() {
   const idx = (filterModes.indexOf(currentFilter.value) + 1) % filterModes.length
   currentFilter.value = filterModes[idx]!
-  notifyMessage(`🧪 Filter set to ${getFilterLabel(currentFilter.value)}.`)
+  notifyMessage(`Filter set to ${getFilterLabel(currentFilter.value)}.`)
 }
 
 function cycleSortMode() {
   const idx = (sortModes.indexOf(currentSort.value) + 1) % sortModes.length
   currentSort.value = sortModes[idx]!
-  notifyMessage(`🔃 Sort set to ${getSortLabel(currentSort.value)}.`)
+  notifyMessage(`Sort set to ${getSortLabel(currentSort.value)}.`)
 }
 
 function calculateDaysUntil(dateString: string): number {
@@ -1351,6 +1353,10 @@ function formatDisplayDate(dateString: string): string {
 
 function setQuantityLevel(level: QuantityLevel) {
   selectedQuantityLevel.value = level
+}
+
+function setInventoryLayout(layout: InventoryLayout) {
+  inventoryLayout.value = layout
 }
 
 function openAddModal() {
@@ -1455,15 +1461,29 @@ function notifyMessage(msg: string) {
   color: #0a1c2f;
   min-height: 100vh;
   padding: 24px 20px;
+  overflow-x: clip;
 }
 
 .dashboard {
   max-width: 1760px;
   margin: 0 auto;
   display: grid;
-  grid-template-columns: clamp(220px, 16vw, 256px) minmax(0, 1fr) clamp(232px, 18vw, 276px);
+  grid-template-columns: clamp(200px, 15vw, 256px) minmax(0, 1fr) clamp(210px, 16vw, 276px);
   gap: clamp(18px, 2vw, 28px);
   align-items: start;
+}
+
+.dashboard > * {
+  min-width: 0;
+}
+
+.dashboard > .sidebar,
+.right-sidebar {
+  position: sticky;
+  top: 24px;
+  align-self: start;
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
 }
 
 /* SIDEBAR */
@@ -1472,8 +1492,6 @@ function notifyMessage(msg: string) {
   border-radius: 34px;
   box-shadow: 0 18px 45px rgba(31, 47, 62, 0.06);
   padding: 34px 24px 26px;
-  position: sticky;
-  top: 24px;
 }
 
 .logo-area {
@@ -1510,26 +1528,45 @@ function notifyMessage(msg: string) {
   font-weight: 500;
   font-size: 0.98rem;
   color: #17304f;
-  cursor: default;
+  cursor: pointer;
   transition: 0.2s;
 }
 .nav-item i {
   width: 24px;
   color: #6883a8;
 }
+.nav-item:hover {
+  background: #f5f9ff;
+}
+
 .nav-item.active {
   background: #eef6ef;
   color: #2c6e49;
 }
+
 .nav-item.active i {
   color: #2c6e49;
 }
+
 hr {
   margin: 28px 0 0;
   border-top: 1px solid #e9edf2;
 }
 
 .main-content {
+  min-width: 0;
+}
+
+.main-content :deep(.top-bar) {
+  width: 100%;
+}
+
+.main-content :deep(.top-bar-actions) {
+  min-width: min(100%, 360px);
+}
+
+.main-content :deep(.search-wrapper) {
+  flex: 1 1 280px;
   min-width: 0;
 }
 
@@ -1591,6 +1628,7 @@ hr {
 }
 
 .layout-toggle-bar {
+  width: 100%;
   display: flex;
   justify-content: center;
   margin: -14px 0 24px;
@@ -1611,20 +1649,21 @@ hr {
 }
 
 .layout-toggle {
-  display: inline-grid;
-  grid-template-columns: repeat(2, minmax(0px, 1fr));
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 6px;
   background: white;
   border: 1px solid #dfe8f4;
-  border-radius: 999px;
+  border-radius: 36px;
   padding: 6px;
   box-shadow: 0 10px 28px rgba(31, 47, 62, 0.04);
 }
 
 .layout-toggle-btn {
   border: none;
-  border-radius: 999px;
-  min-height: 40px;
+  border-radius: 30px;
+  min-height: 48px;
   padding: 0 18px;
   background: transparent;
   color: #48617c;
@@ -1640,13 +1679,22 @@ hr {
   transition:
     background 0.2s ease,
     color 0.2s ease,
+    transform 0.2s ease,
     box-shadow 0.2s ease;
+}
+
+.layout-toggle-btn:hover {
+  background: #f1f5f9;
 }
 
 .layout-toggle-btn.active {
   background: #2c7a4d;
   color: white;
   box-shadow: 0 8px 18px rgba(44, 122, 77, 0.2);
+}
+
+.layout-toggle-btn:active {
+  transform: scale(0.99);
 }
 
 .compact-inventory-board {
@@ -1720,7 +1768,7 @@ hr {
   border-left: 4px solid #7aa587;
   border-radius: 8px;
   display: grid;
-  grid-template-columns: auto minmax(1, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 8px;
   padding: 8px 8px;
@@ -2001,7 +2049,7 @@ hr {
 }
 .food-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
   gap: 24px;
   margin-top: 10px;
 }
@@ -2017,7 +2065,6 @@ hr {
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  max-height: 380px;
 }
 .food-item-card:hover {
   transform: translateY(-2px);
@@ -2033,8 +2080,8 @@ hr {
 }
 .checkbox-overlay {
   position: absolute;
-  top: 75px;
-  right: 26px;
+  top: 70px;
+  right: 20px;
   z-index: 5;
 }
 
@@ -2047,12 +2094,14 @@ hr {
 
 /* NEW CARD STYLES */
 .card-header {
-  padding: 24px 20px 16px;
+  position: relative;
+  padding: 24px 128px 16px 20px;
   border-bottom: 1px solid #f0f4f9;
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
   gap: 16px;
+  min-width: 0;
 }
 
 .card-title-section {
@@ -2062,6 +2111,7 @@ hr {
   justify-content: center;
   gap: 0.5rem;
   min-height: calc(2 * 1.3em);
+  min-width: 0;
 }
 
 .food-title {
@@ -2087,7 +2137,8 @@ hr {
   font-size: 0.85rem;
   font-weight: 600;
   color: #48617c;
-  width: max-content;
+  width: auto;
+  max-width: 100%;
 }
 
 .expiry-badge.urgent {
@@ -2098,10 +2149,12 @@ hr {
 }
 
 .card-badges {
+  position: absolute;
+  top: 24px;
+  right: 20px;
   display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
   justify-content: flex-end;
+  max-width: calc(100% - 40px);
 }
 
 .volume-badge {
@@ -2146,6 +2199,9 @@ hr {
   font-size: 0.82rem;
   font-weight: 600;
   white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .storage-tag {
@@ -2282,8 +2338,7 @@ footer {
   display: flex;
   flex-direction: column;
   gap: 18px;
-  position: sticky;
-  top: 24px;
+  z-index: 1;
 }
 
 .right-box {
@@ -2676,8 +2731,9 @@ footer {
 .row3 {
   padding-top: 10px;
   display: flex;
-  grid-template-columns: 1.5fr 1.5fr 1.5fr;
+  flex-wrap: wrap;
   gap: 10px;
+  min-width: 400px;
 }
 
 .row4 {
@@ -2813,13 +2869,48 @@ footer {
 }
 
 @media (max-width: 1320px) {
+  .dashboard {
+    grid-template-columns: clamp(190px, 20vw, 240px) minmax(0, 1fr);
+  }
+
+  .right-sidebar {
+    grid-column: 1 / -1;
+    position: sticky;
+    top: 24px;
+    align-self: start;
+    z-index: 1;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    align-items: start;
+  }
+
   .food-grid {
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+    gap: 20px;
+  }
+
+  .compact-inventory-board {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
 @media (max-width: 1120px) {
+  .dashboard {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    position: sticky;
+    top: 24px;
+    align-self: start;
+    z-index: 1;
+  }
+
   .top-bar {
+    padding: 18px 24px;
+  }
+
+  .main-content :deep(.top-bar) {
     padding: 18px 24px;
   }
 
@@ -2828,13 +2919,25 @@ footer {
     justify-content: stretch;
   }
 
+  .main-content :deep(.top-bar-actions) {
+    min-width: 100%;
+    justify-content: stretch;
+  }
+
   .search-wrapper {
     flex: 1;
   }
 
+  .main-content :deep(.search-wrapper) {
+    width: 100%;
+  }
+
   .right-sidebar {
     grid-column: 1 / -1;
-    position: static;
+    position: sticky;
+    top: 24px;
+    align-self: start;
+    z-index: 1;
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
     align-items: start;
@@ -2844,7 +2947,10 @@ footer {
 @media (max-width: 920px) {
   .sidebar,
   .right-sidebar {
-    position: static;
+    position: sticky;
+    top: 24px;
+    align-self: start;
+    z-index: 1;
   }
 
   .sidebar {
@@ -2859,17 +2965,21 @@ footer {
     border-radius: 28px;
   }
 
+  .main-content :deep(.top-bar) {
+    border-radius: 28px;
+  }
+
   .top-bar-actions {
     width: 100%;
   }
 
-  .food-grid {
-    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-    gap: 18px;
+  .main-content :deep(.top-bar-actions) {
+    width: 100%;
   }
 
-  .compact-inventory-board {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .food-grid {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+    gap: 18px;
   }
 
   .right-sidebar {
@@ -2912,7 +3022,7 @@ footer {
   }
 
   .card-header {
-    padding: 18px 16px 12px;
+    padding: 18px 112px 12px 16px;
     flex-direction: column;
     gap: 12px;
   }
@@ -2976,6 +3086,10 @@ footer {
   }
 
   .page-title h2 {
+    font-size: 1.7rem;
+  }
+
+  .main-content :deep(.page-title h2) {
     font-size: 1.7rem;
   }
 
@@ -3160,7 +3274,12 @@ footer {
   }
 
   .card-header {
-    padding: 16px 14px 10px;
+    padding: 16px 96px 10px 14px;
+  }
+
+  .card-badges {
+    top: 16px;
+    right: 14px;
   }
 
   .food-title {
@@ -3221,6 +3340,10 @@ footer {
   }
 
   .page-title h2 {
+    font-size: 1.45rem;
+  }
+
+  .main-content :deep(.page-title h2) {
     font-size: 1.45rem;
   }
 
