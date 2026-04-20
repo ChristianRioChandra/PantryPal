@@ -911,7 +911,6 @@
             class="compact-storage-column"
           >
             <div class="compact-column-header">
-
               <h3><i :class="column.icon"></i> {{ column.label }}</h3>
             </div>
 
@@ -926,12 +925,9 @@
                 }"
                 :title="`${item.name} - ${item.volume}`"
               >
-
-
                 <button class="compact-food-main" type="button" @click="openUseModal(item.id)">
                   <span class="compact-food-topline">
                     <span class="compact-food-name">{{ item.name }}</span>
-
                   </span>
                   <span class="compact-food-meta">
                     <span :class="{ urgent: item.expiryDays <= 3 }">
@@ -949,8 +945,6 @@
                     </span>
                   </span>
                 </button>
-
-
               </div>
 
               <div v-if="getFilteredAndSortedItems(column.key).length === 0" class="compact-empty">
@@ -1005,13 +999,10 @@
 </template>
 
 <script setup lang="ts">
-import BaseSidebar from '@/components/BaseSidebar.vue'
 import type { NavItem } from '@/components/BaseSidebar.vue'
-
 import { ref, computed } from 'vue'
 import BaseSidebar from '@/components/BaseSidebar.vue'
 import BaseTopbar from '@/components/BaseTopbar.vue'
-import type { NavItem } from '@/components/BaseSidebar.vue'
 
 // Navigation items
 const navItems: NavItem[] = [
@@ -1604,7 +1595,7 @@ hr {
   justify-content: flex-end;
   margin: -14px 0 24px;
 }
-  
+
 /* Bulk bar */
 .bulk-bar {
   background: white;
@@ -1667,7 +1658,9 @@ hr {
   grid-template-columns: repeat(4, minmax(170px, 1fr));
   gap: 16px;
   padding: 18px;
-  box-shadow: #0a2f0c1a 0px 4px 12px, #142f0a0d 0px 2px 4px;
+  box-shadow:
+    #0a2f0c1a 0px 4px 12px,
+    #142f0a0d 0px 2px 4px;
 }
 
 .compact-storage-column {
@@ -1678,7 +1671,9 @@ hr {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  box-shadow: #1018271a 0px 4px 12px, #1018270d 0px 2px 4px;
+  box-shadow:
+    #1018271a 0px 4px 12px,
+    #1018270d 0px 2px 4px;
 }
 
 .compact-column-header {
@@ -1731,7 +1726,7 @@ hr {
   padding: 8px 8px;
   min-height: 68px;
   box-shadow: 0 6px 12px rgba(31, 47, 62, 0.03);
-  min-width:max-content;
+  min-width: max-content;
 }
 
 .compact-food-item.urgent {
@@ -1752,7 +1747,6 @@ hr {
 }
 
 .compact-food-main {
-
   border: none;
   background: transparent;
   padding: 0;
