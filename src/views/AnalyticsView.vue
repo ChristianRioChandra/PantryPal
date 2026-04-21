@@ -945,7 +945,7 @@ function formatQuantity(value: number, unit: string): string {
   align-items: start;
   display: grid;
   gap: clamp(18px, 2vw, 28px);
-  grid-template-columns: clamp(220px, 16vw, 256px) minmax(0, 1fr) clamp(232px, 18vw, 276px);
+  grid-template-columns: clamp(220px, 16vw, 256px) minmax(0, 1fr);
   margin: 0 auto;
   max-width: 1760px;
 }
