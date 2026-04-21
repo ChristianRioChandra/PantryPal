@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import RegisterView from '../views/RegisterView.vue'
 import LoginView from '../views/LoginView.vue'
+import landingPageView from '../views/landingPageView.vue'
 import PantryPalDashboard from '../views/PantryPalDashboard.vue'
 import ManageInventory from '../views/ManageInventory.vue'
 import PantryPalDonationListing from '../views/PantryPalDonationListing.vue'
@@ -24,6 +25,11 @@ const router = createRouter({
     },
     {
       path: '/',
+      name: 'landing',
+      component: landingPageView,
+    },
+    {
+      path: '/dashboard',
       name: 'dashboard',
       component: PantryPalDashboard,
     },
@@ -59,7 +65,7 @@ const router = createRouter({
 router.beforeEach((to, from, next) => {
   const isLogin = localStorage.getItem('isLogin')
 
-  if (!isLogin && to.name !== 'login' && to.name !== 'register') {
+  if (!isLogin && to.name !== 'login' && to.name !== 'register' && to.path !== '/') {
     next('/login')
   } else {
     next()
