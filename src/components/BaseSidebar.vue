@@ -1,7 +1,13 @@
 <!-- src/components/BaseSidebar.vue -->
 <template>
   <aside class="sidebar">
-    <div class="logo-area">
+    <div
+      class="logo-area"
+      @click="navigateTo('/')"
+      role="button"
+      tabindex="0"
+      @keydown.enter.space="navigateTo('/')"
+    >
       <img class="logo-image" :src="logoFull" :alt="appName" />
     </div>
     <nav>
@@ -67,6 +73,13 @@ const navigateTo = (routePath: string) => router.push(routePath)
   align-items: center;
   margin-bottom: 44px;
   padding-left: 6px;
+  cursor: pointer;
+  user-select: none;
+  transition: opacity 0.2s;
+}
+
+.logo-area:hover {
+  opacity: 0.8;
 }
 
 .logo-image {
