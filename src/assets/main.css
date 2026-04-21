@@ -29,3 +29,29 @@ a,
   transition: 0.4s;
   padding: 3px;
 }
+
+/* Target the buttons specifically */
+::-webkit-scrollbar-button {
+  display: none;
+}
+
+/* Base scrollbar setup */
+::-webkit-scrollbar {
+  width: 10px; /* Vertical width */
+  height: 10px; /* Horizontal height */
+}
+
+/* The modern thumb (draggable part) */
+::-webkit-scrollbar-thumb {
+  background-color: #247239; /* Vue green */
+  border-radius: 20px;       /* Round edges for modern look */
+  border: 2px solid transparent; /* Creates padding around the thumb */
+  background-clip: content-box;  /* Ensures border doesn't cover color */
+}
+
+/* The track (background) */
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 20px;
+}
+
