@@ -1,3 +1,4 @@
+<!-- eslint-disable vue/multi-word-component-names -->
 <template>
   <div class="settings-page">
     <div class="settings-shell">
@@ -295,7 +296,7 @@ const saveProfile = () => {
 }
 
 .settings-shell {
-  max-width: 1520px;
+
   margin: 0 auto;
   display: grid;
   grid-template-columns: clamp(220px, 16vw, 256px) minmax(0, 1fr);
