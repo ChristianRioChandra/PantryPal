@@ -5,9 +5,9 @@
         <span class="selection-count">{{ quickActionsTitle }}</span>
       </div>
       <slot name="quick-actions">
-        <button class="right-btn"><i class="bi bi-plus-circle"></i> Add Food Item</button>
-        <button class="right-btn"><i class="bi bi-heart"></i> Donate Items</button>
-        <button class="right-btn"><i class="bi bi-calendar-plus"></i> Plan Meal</button>
+        <button class="right-btn" @click="$emit('add-food')"><i class="bi bi-plus-circle"></i> Add Food Item</button>
+        <button class="right-btn" @click="$emit('donate-items')"><i class="bi bi-heart"></i> Donate Items</button>
+        <button class="right-btn" @click="$emit('plan-meal')"><i class="bi bi-calendar-plus"></i> Plan Meal</button>
       </slot>
     </div>
 
@@ -38,6 +38,12 @@ withDefaults(defineProps<{
   totalItems: 0,
   expiringSoon: 0,
 })
+
+defineEmits<{
+  (e: 'add-food'): void
+  (e: 'donate-items'): void
+  (e: 'plan-meal'): void
+}>()
 </script>
 
 <style scoped>

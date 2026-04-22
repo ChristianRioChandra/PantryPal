@@ -45,7 +45,7 @@
                 <span class="inv-tag" :class="{ warn: item.warning }">{{ item.tag }}</span>
               </div>
             </div>
-            <button class="card-action-btn">Manage Inventory →</button>
+            <button class="card-action-btn" @click="router.push('/inventory')">Manage Inventory →</button>
           </div>
 
           <!-- Meal Plan Summary -->
@@ -71,7 +71,7 @@
               <div class="meal-slot-label">Dinner</div>
               <div class="meal-slot-name">Shrimp Fried Rice</div>
             </div>
-            <button class="card-action-btn">Manage Plan →</button>
+            <button class="card-action-btn" @click="router.push('/meal-plan')">Manage Plan →</button>
           </div>
 
           <!-- Recommendations -->
@@ -105,17 +105,26 @@
         </div>
       </div>
 
-      <BaseRightSidebar :total-items="inventoryItems.length" :expiring-soon="3" />
+      <BaseRightSidebar
+        :total-items="inventoryItems.length"
+        :expiring-soon="3"
+        @add-food="handleAddFood"
+        @donate-items="router.push('/donations')"
+        @plan-meal="router.push('/meal-plan')"
+      />
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref } from 'vue'
+import { useRouter } from 'vue-router'
 import BaseSidebar from '@/components/BaseSidebar.vue'
 import BaseTopbar from '@/components/BaseTopbar.vue'
 import BaseRightSidebar from '@/components/BaseRightSidebar.vue'
 import type { NavItem } from '@/components/BaseSidebar.vue'
+
+const router = useRouter()
 
 interface InventoryItem {
   id: number
@@ -165,6 +174,10 @@ const inventoryItems = ref<InventoryItem[]>([
     tag: 'Fresh',
   },
 ])
+
+function handleAddFood() {
+  router.push('/inventory?action=add')
+}
 </script>
 
 <style scoped>

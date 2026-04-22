@@ -73,8 +73,8 @@ data() {
     toggleMenu() {
       this.menuOpen = !this.menuOpen
     },
-    animateCount(el) {
-      const target = parseInt(el.dataset.target);
+    animateCount(el: HTMLElement) {
+      const target = parseInt(el.dataset.target as string);
       const suffix = el.dataset.suffix || '';
       let current = 0;
       const increment = target / 100;
@@ -92,7 +92,7 @@ data() {
       const observer = new IntersectionObserver((entries) => {
         entries.forEach((entry) => {
           if (entry.isIntersecting) {
-            this.animateCount(entry.target);
+            this.animateCount(entry.target as HTMLElement);
             observer.unobserve(entry.target);
           }
         });

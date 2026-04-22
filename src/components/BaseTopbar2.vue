@@ -6,9 +6,9 @@
     <div class="top-bar-actions">
       <div class="action-icons">
         <slot name="actions">
-          <i class="bi bi-bell"></i>
-          <i class="bi bi-gear"></i>
-          <i class="bi bi-box-arrow-right"></i>
+          <i class="bi bi-bell" title="Notifications"></i>
+          <i class="bi bi-gear clickable" @click="navigateToSettings" title="Settings"></i>
+          <i class="bi bi-box-arrow-right clickable" @click="navigateToHome" title="Logout"></i>
         </slot>
       </div>
     </div>
@@ -16,6 +16,10 @@
 </template>
 
 <script setup lang="ts">
+import { useRouter } from 'vue-router'
+
+const router = useRouter()
+
 defineProps<{
   title: string
   searchPlaceholder?: string
@@ -25,6 +29,14 @@ defineProps<{
 defineEmits<{
   (e: 'update:searchValue', value: string): void
 }>()
+
+const navigateToSettings = () => {
+  router.push('/settings')
+}
+
+const navigateToHome = () => {
+  router.push('/')
+}
 </script>
 
 <style scoped>
@@ -85,5 +97,14 @@ defineEmits<{
   gap: 22px;
   font-size: 1.35rem;
   color: #5f7f9e;
+}
+
+.action-icons i.clickable {
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+
+.action-icons i.clickable:hover {
+  color: #2c7a4d;
 }
 </style>
