@@ -10,8 +10,8 @@
             <p class="hero-kicker">Preferences</p>
             <h1>Settings Page</h1>
             <p class="hero-copy">
-              Manage security, listing visibility, and account details with the same PantryPal
-              look and feel used across the rest of the app.
+              Manage security, listing visibility, and account details with the same PantryPal look
+              and feel used across the rest of the app.
             </p>
           </div>
 
@@ -123,9 +123,7 @@
                   <button type="button" class="ghost-btn muted" @click="cancelEditing">
                     Cancel
                   </button>
-                  <button type="button" class="ghost-btn primary" @click="saveProfile">
-                    Save
-                  </button>
+                  <button type="button" class="ghost-btn primary" @click="saveProfile">Save</button>
                 </template>
               </div>
             </div>
@@ -199,7 +197,7 @@ interface AccountForm {
 }
 
 const navItems: NavItem[] = [
-  { label: 'Dashboard', route: '/', icon: 'bi bi-graph-up' },
+  { label: 'Dashboard', route: '/dashboard', icon: 'bi bi-graph-up' },
   { label: 'Inventory', route: '/inventory', icon: 'bi bi-box-seam' },
   { label: 'Meal Plan', route: '/meal-plan', icon: 'bi bi-calendar' },
   { label: 'Donation', route: '/donations', icon: 'bi bi-heart' },
@@ -296,7 +294,6 @@ const saveProfile = () => {
 }
 
 .settings-shell {
-
   margin: 0 auto;
   display: grid;
   grid-template-columns: clamp(220px, 16vw, 256px) minmax(0, 1fr);

@@ -3,10 +3,10 @@
   <aside class="sidebar">
     <div
       class="logo-area"
-      @click="navigateTo('/')"
+      @click="navigateTo('/dashboard')"
       role="button"
       tabindex="0"
-      @keydown.enter.space="navigateTo('/')"
+      @keydown.enter.space="navigateTo('/dashboard')"
     >
       <img class="logo-image" :src="logoFull" :alt="appName" />
     </div>
