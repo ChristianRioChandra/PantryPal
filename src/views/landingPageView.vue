@@ -274,15 +274,17 @@ data() {
     <!-- MISSION SECTION -->
     <section id="mission" class="mission-section fade-right" ref="mission">
       <div class="mission-copy">
-        <p class="tagline">— Mission</p>
-        <h2>Make food management feel simple, useful, and human</h2>
+        <p class="tagline">— Vision</p>
+        <h2>Make food management EASY</h2>
         <p>
           PantryPal brings planning, tracking, and sharing together so households can make better
           decisions with the food they already own.
         </p>
       </div>
 
-      <div class="mission-panel">
+      <div class="mission-copy">
+        <p class="tagline">— Mission</p>
+        <div class="mission-panel">
         <div>
           <strong>Less waste</strong>
           <span>Use more before it expires.</span>
@@ -296,6 +298,9 @@ data() {
           <span>Help surplus food reach people.</span>
         </div>
       </div>
+
+      </div>
+
     </section>
 
     <!-- STATISTICS SECTION -->
@@ -502,7 +507,7 @@ nav.open {
 }
 
 .nav-links a {
-  color: rgba(255, 255, 255, 0.72);
+  color: rgba(255, 255, 255, 1);
   font-size: 0.92rem;
   font-weight: 600;
   position: relative;
@@ -525,7 +530,7 @@ nav.open {
 }
 
 .nav-links a:hover {
-  color: var(--forest);
+  color: var(--sage);
 }
 
 .nav-links a:hover::after {
@@ -650,12 +655,13 @@ nav.open {
 .hero-left h1 {
   color: #fffdf8;
   font-family: Georgia, 'Times New Roman', serif;
-  font-size: clamp(3.2rem, 7vw, 6.9rem);
+  font-size: clamp(2.2rem, 5vw, 6.9rem);
   letter-spacing: 0;
   line-height: 0.98;
   margin: 0 0 24px;
   max-width: 900px;
   text-wrap: balance;
+  text-shadow: #000000 1px 1px 2px, #000000 2px 2px 4px, #000000 3px 3px 6px;
 }
 
 .hero-left span {
@@ -1139,7 +1145,7 @@ nav.open {
 }
 
 .hamburger span {
-  background: var(--forest);
+  background: var(--surface-soft);
   border-radius: 2px;
   display: block;
   height: 2px;
