@@ -95,11 +95,11 @@ const handleLogin = async () => {
 
     console.log('SEND TO:', userEmail)
 
-    // Generate OTP
+    // Generate OTP Random Number
     const otp = Math.floor(100000 + Math.random() * 900000).toString()
-    const expiryTime = Date.now() + 180000 // 3 menit
+    const expiryTime = Date.now() + 180000
 
-    // save
+    // save OTP in localStorage
     localStorage.setItem('otp_code', otp)
     localStorage.setItem('otp_expiry', expiryTime.toString())
     localStorage.setItem('otp_email', userEmail)
