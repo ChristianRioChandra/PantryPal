@@ -82,7 +82,7 @@ import type { NavItem } from '@/components/BaseSidebar.vue'
 const router = useRouter()
 
 const navItems: NavItem[] = [
-  { label: 'Dashboard', route: '/', icon: 'bi bi-graph-up' },
+  { label: 'Dashboard', route: '/dashboard', icon: 'bi bi-graph-up' },
   { label: 'Inventory', route: '/inventory', icon: 'bi bi-box-seam' },
   { label: 'Meal Plan', route: '/meal-plan', icon: 'bi bi-calendar' },
   { label: 'Donation', route: '/donations', icon: 'bi bi-heart' },
