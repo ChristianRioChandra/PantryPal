@@ -6,6 +6,18 @@ import ManageInventory from '../ManageInventory.vue'
 import BaseSidebar from '@/components/BaseSidebar.vue'
 import BaseTopbar from '@/components/BaseTopbar.vue'
 
+// Mock vue-router
+vi.mock('vue-router', () => ({
+  useRoute: vi.fn(() => ({
+    params: {},
+    query: {}
+  })),
+  useRouter: vi.fn(() => ({
+    push: vi.fn(),
+    replace: vi.fn()
+  }))
+}))
+
 // Mock child components
 vi.mock('@/components/BaseSidebar.vue', () => ({
   default: {
