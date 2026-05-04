@@ -1,22 +1,29 @@
 <script lang="ts">
 import logoFull from '@/assets/logo/full.png'
 import logoFullWhite from '@/assets/logo/fullWhite.png'
+import { useAuthStore } from '@/stores/auth'
 
 export default {
   name: 'App',
-data() {
+  data() {
     return {
       appName: 'PantryPal',
       logoFull,
       logoFullWhite,
       stats: [
-        { final: 10000, suffix: 'K+', label: 'Happy Users' },
-        { final: 500000, suffix: ' meals', label: 'Meals Planned' },
-        { final: 75, suffix: '%', label: 'Less Waste' },
-        { final: 2500, suffix: '+', label: 'Donations' }
+        { final: 33, suffix: '%', label: 'Food Wasted Globally' },
+        { final: 40, suffix: '%', label: 'Household Food Waste' },
+        { final: 1000, suffix: 'B+', label: 'Annual Economic Loss' },
+        { final: 25, suffix: '%', label: 'Reduced by Smart Tools' },
       ],
       scrolled: false,
       menuOpen: false,
+    }
+  },
+  setup() {
+    const authStore = useAuthStore()
+    return {
+      authStore,
     }
   },
   mounted() {
@@ -31,7 +38,7 @@ data() {
   computed: {
     logoSrc() {
       return this.scrolled ? this.logoFull : this.logoFullWhite
-    }
+    },
   },
   methods: {
     handleScroll() {
@@ -54,6 +61,13 @@ data() {
     goToRegister() {
       this.$router.push('/register')
     },
+    goToDashboard() {
+      this.$router.push('/dashboard')
+    },
+    async handleLogout() {
+      await this.authStore.logout()
+      this.$router.push('/')
+    },
     initIntersectionObserver() {
       const elements = document.querySelectorAll('.fade-up, .fade-left, .fade-right')
       const observer = new IntersectionObserver(
@@ -74,30 +88,33 @@ data() {
       this.menuOpen = !this.menuOpen
     },
     animateCount(el: HTMLElement) {
-      const target = parseInt(el.dataset.target as string);
-      const suffix = el.dataset.suffix || '';
-      let current = 0;
-      const increment = target / 100;
+      const target = parseInt(el.dataset.target as string)
+      const suffix = el.dataset.suffix || ''
+      let current = 0
+      const increment = target / 100
       const timer = setInterval(() => {
-        current += increment;
+        current += increment
         if (current >= target) {
-          el.textContent = `${target.toLocaleString()}${suffix}`;
-          clearInterval(timer);
-          return;
+          el.textContent = `${target.toLocaleString()}${suffix}`
+          clearInterval(timer)
+          return
         }
-        el.textContent = `${Math.floor(current).toLocaleString()}${suffix}`;
-      }, 20);
+        el.textContent = `${Math.floor(current).toLocaleString()}${suffix}`
+      }, 20)
     },
     initStatsObserver() {
-      const observer = new IntersectionObserver((entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            this.animateCount(entry.target as HTMLElement);
-            observer.unobserve(entry.target);
-          }
-        });
-      }, { threshold: 0.5 });
-      document.querySelectorAll('.stat-num').forEach((el) => observer.observe(el));
+      const observer = new IntersectionObserver(
+        (entries) => {
+          entries.forEach((entry) => {
+            if (entry.isIntersecting) {
+              this.animateCount(entry.target as HTMLElement)
+              observer.unobserve(entry.target)
+            }
+          })
+        },
+        { threshold: 0.5 },
+      )
+      document.querySelectorAll('.stat-num').forEach((el) => observer.observe(el))
     },
   },
 }
@@ -107,9 +124,7 @@ data() {
   <div class="landing-page">
     <!-- NAV -->
     <nav id="navbar" :class="{ scrolled: scrolled, open: menuOpen }">
-
-        <img class="logo-image" :src="logoSrc" :alt="appName" />
-
+      <img class="logo-image" :src="logoSrc" :alt="appName" />
 
       <ul class="nav-links" :class="{ active: menuOpen }">
         <li><a href="#about" @click.prevent="scrollToSection('about')">About</a></li>
@@ -119,8 +134,17 @@ data() {
       </ul>
 
       <div class="nav-cta">
-        <a href="#" class="btn-outline" @click.prevent="goToLogin">Log In</a>
-        <a href="#" class="btn-primary" @click.prevent="goToRegister">Get Started</a>
+        <!-- When NOT logged in -->
+        <template v-if="!authStore.isLoggedIn">
+          <a href="#" class="btn-outline" @click.prevent="goToLogin">Log In</a>
+          <a href="#" class="btn-primary" @click.prevent="goToRegister">Get Started</a>
+        </template>
+        <!-- When logged in -->
+        <template v-else>
+          <span class="user-greeting">Welcome, {{ authStore.userName }}!</span>
+          <a href="#" class="btn-primary" @click.prevent="goToDashboard">Dashboard</a>
+          <button class="btn-outline logout-btn" @click="handleLogout">Logout</button>
+        </template>
       </div>
 
       <div
@@ -179,8 +203,7 @@ data() {
         </div>
 
         <div class="badge users">
-          <h3>10K+</h3>
-          <p>Users</p>
+          <h1><i class="bi bi-bell"></i></h1>
         </div>
         <div class="badge review">Reduce Waste</div>
       </div>
@@ -199,18 +222,7 @@ data() {
       </div>
 
       <div class="about-right">
-        <div class="about-card">
-          <h3>📦 Smart Inventory</h3>
-          <p>Keep track of all your food items in one place.</p>
-        </div>
-        <div class="about-card">
-          <h3>🔔 Expiry Alerts</h3>
-          <p>Get notified before your food goes bad.</p>
-        </div>
-        <div class="about-card">
-          <h3>📅 Meal Planning</h3>
-          <p>Plan meals based on available ingredients.</p>
-        </div>
+        <img src="../assets/logo/PP_icon.png" alt="pantry" />
       </div>
     </section>
 
@@ -249,23 +261,19 @@ data() {
 
       <div class="feature-grid">
         <article class="feature-card">
-          <span class="feature-icon">01</span>
-          <h3>Food inventory</h3>
+          <h3> <i class="bi-box"></i>  Food inventory</h3>
           <p>Keep everyday pantry items, fridge staples, and freezer stock easy to find.</p>
         </article>
         <article class="feature-card">
-          <span class="feature-icon">02</span>
-          <h3>Expiry reminders</h3>
+          <h3> <i class="bi-bell"></i>  Expiry reminders</h3>
           <p>Spot food that needs attention before it becomes waste.</p>
         </article>
         <article class="feature-card">
-          <span class="feature-icon">03</span>
-          <h3>Weekly meal planning</h3>
+          <h3> <i class="bi-calendar"></i>  Weekly meal planning</h3>
           <p>Build simple plans around the ingredients you already have.</p>
         </article>
         <article class="feature-card">
-          <span class="feature-icon">04</span>
-          <h3>Donation support</h3>
+          <h3> <i class="bi-heart"></i>  Donation support</h3>
           <p>Share surplus items with others when your pantry has more than you need.</p>
         </article>
       </div>
@@ -285,22 +293,20 @@ data() {
       <div class="mission-copy">
         <p class="tagline">— Mission</p>
         <div class="mission-panel">
-        <div>
-          <strong>Less waste</strong>
-          <span>Use more before it expires.</span>
-        </div>
-        <div>
-          <strong>Better planning</strong>
-          <span>Turn ingredients into meals.</span>
-        </div>
-        <div>
-          <strong>More sharing</strong>
-          <span>Help surplus food reach people.</span>
+          <div>
+            <strong>Less waste</strong>
+            <span>Use more before it expires.</span>
+          </div>
+          <div>
+            <strong>Better planning</strong>
+            <span>Turn ingredients into meals.</span>
+          </div>
+          <div>
+            <strong>More sharing</strong>
+            <span>Help surplus food reach people.</span>
+          </div>
         </div>
       </div>
-
-      </div>
-
     </section>
 
     <!-- STATISTICS SECTION -->
@@ -310,14 +316,11 @@ data() {
         <h2>Real Impact</h2>
         <div class="stats-grid">
           <div v-for="(stat, index) in stats" :key="'stat-' + index" class="stat-item">
-            <div
-              class="stat-num"
-              :data-target="stat.final"
-              :data-suffix="stat.suffix"
-            >0</div>
+            <div class="stat-num" :data-target="stat.final" :data-suffix="stat.suffix">0</div>
             <div class="stat-label">{{ stat.label }}</div>
           </div>
         </div>
+        <p class="stats-source">Sources: FAO, USDA, WRAP | Public data for awareness</p>
       </div>
     </section>
 
@@ -354,8 +357,8 @@ data() {
     <!-- CTA SECTION -->
     <section class="cta-section fade-up">
       <div class="cta-content">
-        <h2>Ready to Transform Your Pantry?</h2>
-        <p>Join thousands reducing waste and saving money.</p>
+        <h2>Ready to Transform Your Food Storage?</h2>
+        <p>Join Now to Reduce Food Waste and Save Money.</p>
         <div class="cta-buttons">
           <button class="btn-primary cta-btn-large" @click="goToRegister">Get Started Free</button>
           <a href="#" class="btn-outline" @click.prevent="scrollToTop">Learn More →</a>
@@ -369,7 +372,6 @@ data() {
         <div class="footer-brand">
           <a href="#" class="nav-logo" @click.prevent="scrollToTop">
             <img class="logo-image small" :src="logoSrc" :alt="appName" />
-            <span class="nav-logo-text">PantryPal</span>
           </a>
         </div>
         <div class="footer-links">
@@ -393,11 +395,10 @@ data() {
           </div>
         </div>
         <div class="footer-bottom">
-          <p>&copy; 2024 PantryPal. All rights reserved. Made with ❤️ to reduce food waste.</p>
+          <p>&copy; 2026 PantryPal. All rights reserved. Strive to reduce food waste.</p>
         </div>
       </div>
     </footer>
-
   </div>
 </template>
 
@@ -467,6 +468,11 @@ nav.open {
   padding-bottom: 14px;
   padding-top: 14px;
   -webkit-text-fill-color: #16221a;
+}
+
+nav.scrolled .btn-outline:hover,
+nav.open .btn-outline:hover {
+  -webkit-text-fill-color: #fff;
 }
 
 .nav-logo {
@@ -543,6 +549,27 @@ nav.open {
   gap: 12px;
 }
 
+.user-greeting {
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 0.9rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.logout-btn {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1.5px solid rgba(255, 255, 255, 0.3);
+  color: rgba(255, 255, 255, 0.9);
+  padding: 8px 16px;
+  font-size: 0.85rem;
+}
+
+.logout-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.5);
+  color: #fff;
+}
+
 .btn-outline,
 .btn-primary {
   border-radius: 999px;
@@ -554,6 +581,7 @@ nav.open {
   justify-content: center;
   min-height: 42px;
   padding: 11px 22px;
+  padding-top: 15px;
   text-decoration: none;
   transition:
     background 0.2s ease,
@@ -661,7 +689,10 @@ nav.open {
   margin: 0 0 24px;
   max-width: 900px;
   text-wrap: balance;
-  text-shadow: #000000 1px 1px 2px, #000000 2px 2px 4px, #000000 3px 3px 6px;
+  text-shadow:
+    #000000 1px 1px 2px,
+    #000000 2px 2px 4px,
+    #000000 3px 3px 6px;
 }
 
 .hero-left span {
@@ -1230,11 +1261,41 @@ nav.open {
   }
 
   .nav-cta {
-    display: none;
+    display: flex;
   }
 
   .hamburger {
     display: flex;
+  }
+
+  .mobile-auth {
+    background: rgba(255, 253, 248, 0.97);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 20px 45px rgba(36, 63, 45, 0.14);
+    left: 20px;
+    opacity: 0;
+    padding: 12px 16px;
+    pointer-events: none;
+    position: absolute;
+    right: 20px;
+    top: 120px;
+    transform: translateY(-10px);
+    transition:
+      opacity 0.25s ease,
+      transform 0.25s ease;
+  }
+
+  .mobile-auth.active {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0);
+  }
+
+  .mobile-user-greeting {
+    color: var(--forest);
+    font-size: 0.9rem;
+    font-weight: 600;
   }
 
   .hero {
@@ -1300,7 +1361,6 @@ nav.open {
   display: block;
   width: min(100%, 175px);
   height: auto;
-
 }
 
 /* STATISTICS SECTION */
@@ -1344,6 +1404,13 @@ nav.open {
   letter-spacing: 0.05em;
 }
 
+.stats-source {
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin-top: 2rem;
+  opacity: 0.8;
+}
+
 /* HOW TO USE SECTION */
 .howto-section {
   padding: clamp(76px, 10vw, 124px) clamp(24px, 7vw, 92px);
@@ -1368,11 +1435,11 @@ nav.open {
 
 .step-card:hover {
   transform: translateY(-8px);
-  border-color: var(--sage);
+  border-color: var(--ink);
 }
 
 .step-number {
-  background: var(--sage);
+  background: var(--forest);
   color: white;
   width: 36px;
   height: 36px;
@@ -1381,7 +1448,7 @@ nav.open {
   align-items: center;
   justify-content: center;
   font-weight: 800;
-  font-size: 0.9rem;
+  font-size: 3.1rem;
   margin-bottom: 24px;
 }
 
@@ -1408,7 +1475,7 @@ nav.open {
   background-image: radial-gradient(circle at top right, var(--deep-sage), transparent);
   border-radius: 24px;
   color: white;
-  max-width: 1100px;
+
   margin: 0 auto;
   padding: clamp(40px, 8vw, 80px) 30px;
   text-align: center;
