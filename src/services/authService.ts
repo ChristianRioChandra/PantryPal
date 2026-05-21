@@ -118,7 +118,42 @@ export async function logoutUser(): Promise<void> {
 
 export async function getUserProfile(uid: string): Promise<UserProfile> {
   const snap = await getDoc(doc(db, 'users', uid))
-  if (!snap.exists()) throw new Error('User profile not found')
+  if (!snap.exists()) {
+    const currentUser = auth.currentUser
+    if (!currentUser || currentUser.uid !== uid || !currentUser.email) {
+      throw new Error('User profile not found')
+    }
+
+    const defaultProfile = {
+      name: currentUser.displayName || currentUser.email.split('@')[0] || 'User',
+      email: currentUser.email,
+      householdSize: null,
+      is_verified: false,
+      two_factor_enabled: false,
+      email_notifications_enabled: true,
+      privacy_settings: {
+        listing_visibility: 'public',
+        show_location: true,
+      } as PrivacySettings,
+      inventory_ui_prefs: {
+        layout: 'cards',
+        filter: '',
+        sort: 'name',
+        expanded_categories: {
+          all: true,
+          fridge: true,
+          pantry: true,
+          freezer: true,
+          countertop: true,
+          expiry: true,
+        },
+      } as InventoryUiPrefs,
+      created_at: serverTimestamp(),
+    }
+
+    await setDoc(doc(db, 'users', uid), defaultProfile)
+    return { id: uid, ...defaultProfile } as UserProfile
+  }
   return { id: snap.id, ...snap.data() } as UserProfile
 }
 

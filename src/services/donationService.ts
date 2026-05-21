@@ -13,7 +13,7 @@ import {
   arrayUnion,
 } from 'firebase/firestore'
 import { db } from '../firebase'
-import { markFoodAsDonated } from './foodService'
+import { addFoodItem, markFoodAsDonated } from './foodService'
 import { createNotification, NotificationType } from './notificationService'
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
@@ -66,6 +66,7 @@ export interface DonationRequest {
 
 const LISTING_COL = 'donationListings'
 const REQUEST_COL = 'donationRequests'
+const trimForRule = (value: string, maxLength: number) => value.trim().slice(0, maxLength)
 
 // ─── Create Donation Listing ──────────────────────────────────────────────────
 
@@ -144,6 +145,15 @@ export async function cancelDonationListing(listingId: string): Promise<void> {
 
 export async function claimDonation(claimerUid: string, listingId: string): Promise<string> {
   const listing = await getDonationListing(listingId)
+  const listingData = listing as unknown as Record<string, unknown>
+  const expiryDate =
+    typeof listingData['expiry_date'] === 'string'
+      ? listingData['expiry_date']
+      : listing.expiryDate
+  const pickupLocation =
+    typeof listingData['pickup_location'] === 'string'
+      ? listingData['pickup_location']
+      : listing.pickupLocation
 
   const reqRef = await addDoc(collection(db, REQUEST_COL), {
     claimer_user_id: claimerUid,
@@ -158,6 +168,17 @@ export async function claimDonation(claimerUid: string, listingId: string): Prom
   await updateDoc(doc(db, LISTING_COL, listingId), {
     status: ListingStatus.CLAIMED,
     claimed_by_uids: arrayUnion(claimerUid),
+  })
+
+  await addFoodItem(claimerUid, {
+    name: trimForRule(listing.title, 80),
+    quantity: listing.quantity,
+    unit: 'unit',
+    expiryDate,
+    foodType: 'Donation',
+    type: 'pantry',
+    storageLocation: trimForRule(pickupLocation || 'Claimed donation', 80),
+    notes: trimForRule(listing.description ?? `Claimed from donation listing ${listingId}`, 500),
   })
 
   await createNotification(listing.user_id, {

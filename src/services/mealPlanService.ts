@@ -3,6 +3,7 @@ import {
   collection,
   doc,
   addDoc,
+  setDoc,
   getDocs,
   updateDoc,
   deleteDoc,
@@ -67,6 +68,7 @@ export interface SaveDailyMealPlanSlot {
 }
 
 const PLAN_COL = 'mealPlans'
+const getDailyMealPlanId = (uid: string, date: string) => `${uid}_${date}`
 
 // ─── Create Meal Plan ─────────────────────────────────────────────────────────
 
@@ -74,13 +76,14 @@ export async function createMealPlan(
   uid: string,
   { date, description }: CreateMealPlanPayload,
 ): Promise<string> {
-  const docRef = await addDoc(collection(db, PLAN_COL), {
+  const mealPlanId = getDailyMealPlanId(uid, date)
+  await setDoc(doc(db, PLAN_COL, mealPlanId), {
     user_id: uid,
     date,
     description: description ?? null,
     created_at: serverTimestamp(),
   })
-  return docRef.id
+  return mealPlanId
 }
 
 // ─── Get User's Meal Plans ────────────────────────────────────────────────────
@@ -97,7 +100,11 @@ export async function getMealPlanByDate(uid: string, date: string): Promise<Meal
   const q = query(collection(db, PLAN_COL), where('user_id', '==', uid), where('date', '==', date))
   const snap = await getDocs(q)
   if (snap.empty) return null
-  const d = snap.docs[0]!
+  const d = snap.docs.find((candidate) => {
+    const data = candidate.data()
+    return data['user_id'] === uid && data['date'] === date
+  })
+  if (!d) return null
   return { id: d.id, ...d.data() } as MealPlan
 }
 

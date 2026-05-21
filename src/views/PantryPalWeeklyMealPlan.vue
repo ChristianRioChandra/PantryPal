@@ -983,11 +983,17 @@ const mealSearch = ref('')
   gap: 8px;
   margin-bottom: 16px;
 }
-.inv-search-row input {
+
+.inv-search-row .input-wrapper {
   flex: 1;
-  padding: 8px 12px;
+  width: 100%;
+}
+
+.inv-search-row .premium-input {
+  min-height: 46px;
+  padding: 12px 14px 12px 42px;
   border: 1px solid #e2e8f0;
-  border-radius: 40px;
+  border-radius: 16px;
   background: #f8fafc;
 }
 .filter-btn-sm {
