@@ -10,6 +10,7 @@ import {
   where,
   orderBy,
   serverTimestamp,
+  arrayUnion,
 } from 'firebase/firestore'
 import { db } from '../firebase'
 import { markFoodAsDonated } from './foodService'
@@ -152,6 +153,13 @@ export async function claimDonation(claimerUid: string, listingId: string): Prom
     confirmed_at: null,
   })
 
+  // Set the listing status to claimed and add claimer to claimed_by_uids
+  // This allows the claimer to read the listing even after it's completed/cancelled
+  await updateDoc(doc(db, LISTING_COL, listingId), {
+    status: ListingStatus.CLAIMED,
+    claimed_by_uids: arrayUnion(claimerUid),
+  })
+
   await createNotification(listing.user_id, {
     type: NotificationType.DONATION_CLAIMED,
     message: `Your listing "${listing.title}" has been requested.`,
@@ -174,7 +182,13 @@ export async function confirmDonationRequest(requestId: string, listingId: strin
 // ─── Reject Donation Request ──────────────────────────────────────────────────
 
 export async function rejectDonationRequest(requestId: string): Promise<void> {
-  await updateDoc(doc(db, REQUEST_COL, requestId), { status: RequestStatus.REJECTED })
+  const reqSnap = await getDoc(doc(db, REQUEST_COL, requestId))
+  if (reqSnap.exists()) {
+    const reqData = reqSnap.data()
+    const listingId = reqData.listing_id
+    await updateDoc(doc(db, REQUEST_COL, requestId), { status: RequestStatus.REJECTED })
+    await updateDoc(doc(db, LISTING_COL, listingId), { status: ListingStatus.ACTIVE })
+  }
 }
 
 // ─── Get Requests for a Listing ───────────────────────────────────────────────

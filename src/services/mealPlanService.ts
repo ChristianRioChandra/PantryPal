@@ -59,6 +59,13 @@ export interface MealPlanItem {
   recipe_name: string | null
 }
 
+export interface SaveDailyMealPlanSlot {
+  mealType: MealTypeValue
+  recipeName: string
+  foodIds: string[]
+  reservedQuantity?: number
+}
+
 const PLAN_COL = 'mealPlans'
 
 // ─── Create Meal Plan ─────────────────────────────────────────────────────────
@@ -123,12 +130,64 @@ export async function addMealPlanItemWithNotification(
   return docRef.id
 }
 
+// ─── Add Meal Plan Item ───────────────────────────────────────────────────────
+
+export async function addMealPlanItem(
+  mealPlanId: string,
+  itemData: AddMealPlanItemPayload,
+): Promise<string> {
+  const itemsCol = collection(db, PLAN_COL, mealPlanId, 'mealPlanItems')
+
+  const docRef = await addDoc(itemsCol, {
+    food_id: itemData.foodId,
+    meal_plan_id: mealPlanId,
+    meal_date: itemData.mealDate,
+    meal_type: itemData.mealType,
+    reserved_quantity: itemData.reservedQuantity,
+    recipe_name: itemData.recipeName ?? null,
+  })
+
+  return docRef.id
+}
+
 // ─── Get Meal Plan Items ──────────────────────────────────────────────────────
 
 export async function getMealPlanItems(mealPlanId: string): Promise<MealPlanItem[]> {
   const itemsCol = collection(db, PLAN_COL, mealPlanId, 'mealPlanItems')
   const snap = await getDocs(itemsCol)
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as MealPlanItem)
+}
+
+// ─── Save Daily Meal Plan ─────────────────────────────────────────────────────
+
+export async function saveDailyMealPlan(
+  uid: string,
+  date: string,
+  slots: SaveDailyMealPlanSlot[],
+): Promise<string> {
+  const existingPlan = await getMealPlanByDate(uid, date)
+  const mealPlanId =
+    existingPlan?.id ?? (await createMealPlan(uid, { date, description: null }))
+
+  const existingItems = await getMealPlanItems(mealPlanId)
+  await Promise.all(existingItems.map((item) => deleteMealPlanItem(mealPlanId, item.id)))
+
+  const itemsToSave = slots
+    .filter((slot) => slot.recipeName.trim())
+    .flatMap((slot) => {
+      const foodIds = slot.foodIds.length > 0 ? slot.foodIds : [`manual-${slot.mealType}`]
+      return foodIds.map((foodId) => ({
+        foodId,
+        mealDate: date,
+        mealType: slot.mealType,
+        reservedQuantity: slot.reservedQuantity ?? 1,
+        recipeName: slot.recipeName.trim(),
+      }))
+    })
+
+  await Promise.all(itemsToSave.map((item) => addMealPlanItem(mealPlanId, item)))
+
+  return mealPlanId
 }
 
 // ─── Update Meal Plan Item ────────────────────────────────────────────────────

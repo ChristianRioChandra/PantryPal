@@ -277,7 +277,7 @@ service cloud.firestore {
           'email_sent'
         ]) &&
         data.user_id is string &&
-        isOwner(data.user_id) &&
+        (isOwner(data.user_id) || (signedIn() && data.type in ['DONATION_CLAIMED', 'DONATION_CONFIRMED'])) &&
         isValidNotificationType(data.type) &&
         isNonEmptyString(data.message, 300) &&
         data.is_read is bool &&
@@ -298,7 +298,8 @@ service cloud.firestore {
           'availability_start',
           'availability_end',
           'status',
-          'created_at'
+          'created_at',
+          'claimed_by_uids'
         ]) &&
         data.user_id is string &&
         isOwner(data.user_id) &&
@@ -313,7 +314,8 @@ service cloud.firestore {
         isNonEmptyString(data.availability_start, 40) &&
         isNonEmptyString(data.availability_end, 40) &&
         isValidListingStatus(data.status) &&
-        data.created_at is timestamp;
+        data.created_at is timestamp &&
+        (data.get('claimed_by_uids', null) == null || (data.claimed_by_uids is list && data.claimed_by_uids.size() <= 100));
     }
 
     function isValidRequestDoc(data) {
@@ -354,8 +356,22 @@ service cloud.firestore {
       return signedIn() &&
         (
           resource.data.status == 'active' ||
-          isOwner(resource.data.user_id)
+          resource.data.status == 'claimed' ||
+          isOwner(resource.data.user_id) ||
+          // Allow reading if user has claimed this listing (even if completed/cancelled)
+          (resource.data.get('claimed_by_uids', null) != null && request.auth.uid in resource.data.claimed_by_uids)
         );
+    }
+
+    function isValidClaimListingUpdate() {
+      return signedIn() &&
+        resource.data.status == 'active' &&
+        resource.data.user_id != request.auth.uid &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'claimed_by_uids']) &&
+        request.resource.data.status == 'claimed' &&
+        request.resource.data.claimed_by_uids is list &&
+        request.auth.uid in request.resource.data.claimed_by_uids &&
+        request.resource.data.claimed_by_uids.size() <= 100;
     }
 
     // ===============================================================
@@ -451,11 +467,16 @@ service cloud.firestore {
       allow read: if canReadListing();
 
       allow update: if signedIn() &&
-        isOwner(resource.data.user_id) &&
-        isValidListingDoc(request.resource.data) &&
-        request.resource.data.user_id == resource.data.user_id &&
-        request.resource.data.food_id == resource.data.food_id &&
-        request.resource.data.created_at == resource.data.created_at;
+        (
+          (
+            isOwner(resource.data.user_id) &&
+            isValidListingDoc(request.resource.data) &&
+            request.resource.data.user_id == resource.data.user_id &&
+            request.resource.data.food_id == resource.data.food_id &&
+            request.resource.data.created_at == resource.data.created_at
+          ) ||
+          isValidClaimListingUpdate()
+        );
 
       allow delete: if false;
     }

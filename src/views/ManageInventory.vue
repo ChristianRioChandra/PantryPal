@@ -265,6 +265,96 @@
       </div>
     </Transition>
 
+    <!-- DONATE ITEM MODAL -->
+    <Transition name="premium-modal">
+      <div v-if="donateModalOpen" class="modal-overlay" @click.self="closeDonateModal">
+        <div class="modal-box">
+          <h2>{{ isBulkDonation ? 'Donate Selected Items' : 'Donate Food Item' }}</h2>
+          <p v-if="!isBulkDonation" style="font-weight: 600; text-align: center; color: #2c7a4d; margin-bottom: 12px;">{{ donateForm.title }}</p>
+
+          <div v-if="!isBulkDonation" class="form-section">
+            <label class="field-label">Donation Title</label>
+            <input
+              type="text"
+              v-model="donateForm.title"
+              placeholder="Enter item title for donation"
+              class="form-input"
+            />
+          </div>
+
+          <div v-if="!isBulkDonation" class="form-section">
+            <label class="field-label">Donation Description</label>
+            <textarea
+              v-model="donateForm.description"
+              placeholder="Brief details about pickup, freshness, packaging etc."
+              class="form-textarea"
+              rows="3"
+            ></textarea>
+          </div>
+
+          <div class="form-row">
+            <div v-if="!isBulkDonation" class="form-section">
+              <label class="field-label">Quantity</label>
+              <input
+                type="number"
+                v-model.number="donateForm.quantity"
+                min="1"
+                class="form-input"
+              />
+            </div>
+            <div v-if="!isBulkDonation" class="form-section">
+              <label class="field-label">Expiry Date</label>
+              <input
+                type="date"
+                v-model="donateForm.expiryDate"
+                class="form-input"
+              />
+            </div>
+          </div>
+
+          <div class="form-section">
+            <label class="field-label">Pickup Location</label>
+            <input
+              type="text"
+              v-model="donateForm.pickupLocation"
+              placeholder="e.g. Main Lobby, PantryPal Hub, Apartment 4B"
+              class="form-input"
+            />
+          </div>
+
+          <div class="form-row">
+            <div class="form-section">
+              <label class="field-label">Available From</label>
+              <input
+                type="text"
+                v-model="donateForm.availabilityStart"
+                placeholder="e.g. 09:00 AM"
+                class="form-input"
+              />
+            </div>
+            <div class="form-section">
+              <label class="field-label">Available Until</label>
+              <input
+                type="text"
+                v-model="donateForm.availabilityEnd"
+                placeholder="e.g. 05:00 PM"
+                class="form-input"
+              />
+            </div>
+          </div>
+
+          <div class="modal-actions">
+            <button @click="closeDonateModal" class="modal-cancel">
+              Cancel
+            </button>
+            <button @click="submitDonation" class="modal-add" id="submitDonationBtn">
+              Publish Donation
+            </button>
+          </div>
+        </div>
+      </div>
+    </Transition>
+
     <Transition name="premium-modal">
       <div
         v-if="mobileFilterModalOpen"
@@ -965,6 +1055,7 @@ import {
   updateFoodItem,
   type FoodItem,
 } from '@/services/foodService'
+import { createDonationListing } from '@/services/donationService'
 import { addLocalAnalyticsEvent, addLocalAnalyticsEvents } from '@/services/localAnalyticsStore'
 import {
   getInventoryUiPrefs,
@@ -1158,6 +1249,19 @@ const confirmationItemId = ref<string | null>(null)
 const confirmationAction = ref<'delete' | 'finish' | null>(null)
 const selectedUseQuantity = ref('high')
 const selectedStorage = ref('fridge')
+
+const donateModalOpen = ref(false)
+const isBulkDonation = ref(false)
+const donatingItem = ref<InventoryItem | null>(null)
+const donateForm = ref({
+  title: '',
+  description: '',
+  quantity: 1,
+  expiryDate: '',
+  pickupLocation: '',
+  availabilityStart: '09:00',
+  availabilityEnd: '17:00',
+})
 
 const newItem = ref({
   name: '',
@@ -1569,17 +1673,116 @@ async function confirmPendingAction() {
   }
 }
 
-async function singleDonate(id: string) {
-  const item = inventory.value.find((i) => i.id === id)
-  if (!item) return
+function getInitialQuantity(volume: string): number {
+  const match = volume.match(/(\d+)/)
+  return match ? parseInt(match[1]!) : 1
+}
+
+function openDonateModal(item: InventoryItem) {
+  donatingItem.value = item
+  isBulkDonation.value = false
+  donateForm.value = {
+    title: item.name,
+    description: item.description || `Fresh ${item.name} available.`,
+    quantity: getInitialQuantity(item.volume),
+    expiryDate: item.expiryDate || new Date().toISOString().slice(0, 10),
+    pickupLocation: localStorage.getItem('last_pickup_location') || 'Community Hub',
+    availabilityStart: '09:00',
+    availabilityEnd: '17:00',
+  }
+  donateModalOpen.value = true
+}
+
+function openBulkDonateModal() {
+  isBulkDonation.value = true
+  donatingItem.value = null
+  donateForm.value = {
+    title: `Bulk Donation (${selectedDonationIds.value.size} items)`,
+    description: '',
+    quantity: 1,
+    expiryDate: '',
+    pickupLocation: localStorage.getItem('last_pickup_location') || 'Community Hub',
+    availabilityStart: '09:00',
+    availabilityEnd: '17:00',
+  }
+  donateModalOpen.value = true
+}
+
+function closeDonateModal() {
+  donateModalOpen.value = false
+  donatingItem.value = null
+}
+
+async function submitDonation() {
+  const uid = auth.currentUser?.uid
+  if (!uid) {
+    notifyMessage('You must be logged in to donate items.')
+    return
+  }
+
   try {
-    await markFoodAsDonated(id)
-    recordInventoryAnalytics(item, 'donated')
-    selectedDonationIds.value.delete(id)
-    notifyMessage('Donated item. Thank you for sharing!')
+    if (isBulkDonation.value) {
+      // Bulk Donation
+      const ids = Array.from(selectedDonationIds.value)
+      const selectedItems = ids
+        .map((id) => inventory.value.find((i) => i.id === id))
+        .filter((item): item is InventoryItem => Boolean(item))
+
+      await Promise.all(
+        selectedItems.map((item) => {
+          return createDonationListing(uid, item.id, {
+            title: item.name,
+            description: item.description || `Fresh ${item.name} available.`,
+            quantity: getInitialQuantity(item.volume),
+            expiryDate: item.expiryDate || new Date().toISOString().slice(0, 10),
+            pickupLocation: donateForm.value.pickupLocation,
+            availabilityStart: donateForm.value.availabilityStart,
+            availabilityEnd: donateForm.value.availabilityEnd,
+          })
+        })
+      )
+
+      addLocalAnalyticsEvents(
+        selectedItems.map((item) => ({
+          kind: 'donated',
+          name: item.name,
+          category: item.category,
+          foodType: item.foodType,
+          quantity: getVolumeQuantity(item.volume),
+          unit: getVolumeUnit(item.volume),
+        })),
+      )
+
+      selectedDonationIds.value.clear()
+      notifyMessage('Selected items published for donation! Thank you for sharing! 🤝')
+    } else {
+      // Single Donation
+      const item = donatingItem.value
+      if (!item) return
+
+      await createDonationListing(uid, item.id, {
+        title: donateForm.value.title,
+        description: donateForm.value.description,
+        quantity: donateForm.value.quantity,
+        expiryDate: donateForm.value.expiryDate,
+        pickupLocation: donateForm.value.pickupLocation,
+        availabilityStart: donateForm.value.availabilityStart,
+        availabilityEnd: donateForm.value.availabilityEnd,
+      })
+
+      recordInventoryAnalytics(item, 'donated')
+      selectedDonationIds.value.delete(item.id)
+      
+      // Save last used location for convenience
+      localStorage.setItem('last_pickup_location', donateForm.value.pickupLocation)
+
+      notifyMessage(`"${donateForm.value.title}" published for donation! Thank you! 🤝`)
+    }
+    
+    closeDonateModal()
   } catch (error) {
-    console.error('Failed to donate item:', error)
-    notifyMessage('Failed to donate item.')
+    console.error('Failed to submit donation:', error)
+    notifyMessage('Failed to publish donation. Please check your inputs.')
   }
 }
 
@@ -1599,33 +1802,15 @@ function clearAllSelections() {
   selectedDonationIds.value.clear()
 }
 
+async function singleDonate(id: string) {
+  const item = inventory.value.find((i) => i.id === id)
+  if (!item) return
+  openDonateModal(item)
+}
+
 async function bulkDonateAction() {
   if (selectedDonationIds.value.size === 0) return
-  const ids = Array.from(selectedDonationIds.value)
-  const selectedItems = ids
-    .map((id) => inventory.value.find((i) => i.id === id))
-    .filter((item): item is InventoryItem => Boolean(item))
-  const names = selectedItems.map((item) => item.name)
-  addLocalAnalyticsEvents(
-    selectedItems.map((item) => ({
-      kind: 'donated',
-      name: item.name,
-      category: item.category,
-      foodType: item.foodType,
-      quantity: getVolumeQuantity(item.volume),
-      unit: getVolumeUnit(item.volume),
-    })),
-  )
-  try {
-    await Promise.all(ids.map((id) => markFoodAsDonated(id)))
-    selectedDonationIds.value.clear()
-    notifyMessage(
-      `Donated ${ids.length} item(s): ${names.join(', ')}. Thank you for reducing waste!`,
-    )
-  } catch (error) {
-    console.error('Failed to bulk donate items:', error)
-    notifyMessage('Failed to donate selected items.')
-  }
+  openBulkDonateModal()
 }
 
 function getFilterLabel(filter: string): string {

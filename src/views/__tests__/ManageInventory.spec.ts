@@ -55,6 +55,11 @@ vi.mock('@/services/foodService', () => ({
   },
 }))
 
+// Mock donationService
+vi.mock('@/services/donationService', () => ({
+  createDonationListing: vi.fn().mockResolvedValue('mock-listing-id'),
+}))
+
 // Mock authService UI prefs
 vi.mock('@/services/authService', () => ({
   getInventoryUiPrefs: vi.fn().mockResolvedValue({}),
@@ -385,12 +390,19 @@ describe('ManageInventory.vue', () => {
   })
 
   it('TC-025: bulk donate removes selected items', async () => {
+    const { createDonationListing } = await import('@/services/donationService')
     wrapper.vm.selectedDonationIds.add('f1')
     await nextTick()
     const donateBtn = wrapper.find('#donateBulkBtn')
     if (donateBtn.exists()) {
       await donateBtn.trigger('click')
       await nextTick()
+      const submitBtn = wrapper.find('#submitDonationBtn')
+      if (submitBtn.exists()) {
+        await submitBtn.trigger('click')
+        await nextTick()
+      }
+      expect(createDonationListing).toHaveBeenCalled()
       expect(wrapper.vm.selectedDonationIds.size).toBe(0)
     }
   })
@@ -502,11 +514,17 @@ describe('ManageInventory.vue', () => {
   })
 
   it('TC-037: single donate removes item', async () => {
+    const { createDonationListing } = await import('@/services/donationService')
     const donateBtn = wrapper.find('.mini-btn.donate-mini')
     if (donateBtn.exists()) {
       await donateBtn.trigger('click')
       await nextTick()
-      // Item should be removed
+      const submitBtn = wrapper.find('#submitDonationBtn')
+      if (submitBtn.exists()) {
+        await submitBtn.trigger('click')
+        await nextTick()
+      }
+      expect(createDonationListing).toHaveBeenCalled()
     }
   })
 

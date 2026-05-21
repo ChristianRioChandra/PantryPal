@@ -329,16 +329,20 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import BaseSidebar from '@/components/BaseSidebar.vue'
 import BaseTopbar from '@/components/BaseTopbar.vue'
 import BaseRightSidebar from '@/components/BaseRightSidebar.vue'
 import type { NavItem } from '@/components/BaseSidebar.vue'
 import { auth } from '@/firebase'
 import { onAuthStateChanged, type User } from 'firebase/auth'
-import { getUserFoodItems } from '@/services/foodService'
-import { saveMealPlan as saveMealToDb, getMealPlan as getMealFromDb } from '@/services/mealService'
+import { getUserFoodItems, type FoodItem } from '@/services/foodService'
+import {
+  getMealPlanByDate,
+  getMealPlanItems,
+  saveDailyMealPlan,
+  type MealTypeValue,
+} from '@/services/mealPlanService'
 
 // Types
 interface InventoryItem {
@@ -347,6 +351,7 @@ interface InventoryItem {
   name: string
   location: string
   expiry: string
+  expiryDate: Date
   tag?: string
   warning?: boolean
 }
@@ -359,9 +364,16 @@ interface Recommendation {
 }
 
 interface MealSlot {
-  type: string
+  type: MealTypeValue
   label: string
   meal: string
+  ingredientIds: string[]
+}
+
+interface SelectedIngredient {
+  id: string
+  icon: string
+  name: string
 }
 
 // Navigation
@@ -375,8 +387,10 @@ const navItems: NavItem[] = [
 ]
 
 // Calendar
-const currentDate = ref(new Date(2026, 3, 14))
-const selectedDate = ref(new Date(2026, 3, 14))
+const initialDate = new Date()
+initialDate.setHours(0, 0, 0, 0)
+const currentDate = ref(new Date(initialDate.getFullYear(), initialDate.getMonth(), 1))
+const selectedDate = ref(new Date(initialDate))
 const dayLabels = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']
 
 const currentMonthYear = computed(() =>
@@ -463,48 +477,87 @@ const nextMonth = () => {
 const selectDate = (date: Date) => {
   selectedDate.value = new Date(date)
   selectedDate.value.setHours(0, 0, 0, 0)
-  loadMealsForDate()
 }
 
 // Meal slots
-const mealSlots = ref<MealSlot[]>([
-  { type: 'breakfast', label: 'Breakfast', meal: '' },
-  { type: 'lunch', label: 'Lunch', meal: '' },
-  { type: 'dinner', label: 'Dinner', meal: '' },
-  { type: 'snacks', label: 'Snacks', meal: '' },
-])
+const createEmptyMealSlots = (): MealSlot[] => [
+  { type: 'breakfast', label: 'Breakfast', meal: '', ingredientIds: [] },
+  { type: 'lunch', label: 'Lunch', meal: '', ingredientIds: [] },
+  { type: 'dinner', label: 'Dinner', meal: '', ingredientIds: [] },
+  { type: 'snack', label: 'Snacks', meal: '', ingredientIds: [] },
+]
+
+const mealSlots = ref<MealSlot[]>(createEmptyMealSlots())
 
 const currentUser = ref<User | null>(null)
 const isLoading = ref(false)
+let unsubscribeAuth: (() => void) | null = null
 
 // Inventory
 const inventoryItems = ref<InventoryItem[]>([])
+
+const getFoodRawField = (item: FoodItem, field: string) =>
+  (item as unknown as Record<string, unknown>)[field]
+
+const getInventoryIcon = (foodType: string, storageType: string) => {
+  const type = foodType.toLowerCase()
+  if (type.includes('vegetable') || type.includes('produce')) return '🥦'
+  if (type.includes('dairy') || type.includes('milk')) return '🥛'
+  if (type.includes('grain') || type.includes('rice')) return '🍚'
+  if (type.includes('bread') || type.includes('bakery')) return '🍞'
+  if (type.includes('egg')) return '🥚'
+  if (storageType === 'fridge') return '🧊'
+  if (storageType === 'freezer') return '❄️'
+  if (storageType === 'pantry') return '📦'
+  return '🍽️'
+}
+
+const formatStorageLocation = (value: unknown, fallbackType: string) => {
+  if (typeof value === 'string' && value.trim()) return value
+  const labels: Record<string, string> = {
+    fridge: 'Fridge',
+    pantry: 'Pantry',
+    freezer: 'Freezer',
+    countertop: 'Countertop',
+  }
+  return labels[fallbackType] ?? 'Storage'
+}
 
 const fetchInventory = async () => {
   if (!currentUser.value) return
   try {
     const items = await getUserFoodItems(currentUser.value.uid)
-    inventoryItems.value = items.map((item) => {
-      // Calculate warning (e.g., if expires in < 3 days)
-      const expiry = new Date(item.expiryDate)
-      const now = new Date()
-      const diffTime = expiry.getTime() - now.getTime()
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+    inventoryItems.value = items
+      .filter((item) => item.status === 'available' || item.status === 'planned')
+      .map((item) => {
+        const rawExpiryDate = getFoodRawField(item, 'expiry_date')
+        const rawFoodType = getFoodRawField(item, 'food_type')
+        const rawStorageLocation = getFoodRawField(item, 'storage_location')
+        const expiryDateString =
+          typeof rawExpiryDate === 'string' ? rawExpiryDate : new Date().toISOString().slice(0, 10)
+        const storageType = item.type || 'fridge'
+        const foodType = typeof rawFoodType === 'string' ? rawFoodType : item.foodType || 'Food'
+        const expiry = new Date(`${expiryDateString}T00:00:00`)
+        const now = new Date()
+        now.setHours(0, 0, 0, 0)
+        const diffTime = expiry.getTime() - now.getTime()
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
 
-      return {
-        id: item.id,
-        icon: item.foodType === 'Vegetables' ? '🥦' : item.foodType === 'Dairy' ? '🥛' : '📦', // Simple icon mapping
-        name: item.name,
-        location: item.storageLocation || 'Unknown',
-        expiry: new Date(item.expiryDate).toLocaleDateString('en-GB', {
-          day: 'numeric',
-          month: 'short',
-          year: 'numeric',
-        }),
-        warning: diffDays <= 3 && diffDays >= 0,
-        tag: diffDays >= 0 ? `${diffDays}d` : 'Expired',
-      }
-    })
+        return {
+          id: item.id,
+          icon: getInventoryIcon(foodType, storageType),
+          name: item.name,
+          location: formatStorageLocation(rawStorageLocation, storageType),
+          expiry: expiry.toLocaleDateString('en-GB', {
+            day: 'numeric',
+            month: 'short',
+            year: 'numeric',
+          }),
+          expiryDate: expiry,
+          warning: diffDays <= 3 && diffDays >= 0,
+          tag: diffDays >= 0 ? `${diffDays}d` : 'Expired',
+        }
+      })
   } catch (error) {
     console.error('Error fetching inventory:', error)
   }
@@ -524,17 +577,20 @@ const loadMealsForDate = async () => {
   isLoading.value = true
 
   try {
-    const saved = await getMealFromDb(currentUser.value.uid, dateKey!)
-    if (saved && saved.slots) {
-      mealSlots.value = saved.slots.map((slot) => ({ ...slot }))
-    } else {
-      mealSlots.value = [
-        { type: 'breakfast', label: 'Breakfast', meal: '' },
-        { type: 'lunch', label: 'Lunch', meal: '' },
-        { type: 'dinner', label: 'Dinner', meal: '' },
-        { type: 'snacks', label: 'Snacks', meal: '' },
-      ]
+    const savedPlan = await getMealPlanByDate(currentUser.value.uid, dateKey)
+    const nextSlots = createEmptyMealSlots()
+
+    if (savedPlan) {
+      const savedItems = await getMealPlanItems(savedPlan.id)
+      savedItems.forEach((item) => {
+        const slot = nextSlots.find((s) => s.type === item.meal_type)
+        if (!slot) return
+        if (!slot.meal && item.recipe_name) slot.meal = item.recipe_name
+        if (!item.food_id.startsWith('manual-')) slot.ingredientIds.push(item.food_id)
+      })
     }
+
+    mealSlots.value = nextSlots
   } catch (error) {
     console.error('Error loading meal plan:', error)
   } finally {
@@ -543,13 +599,20 @@ const loadMealsForDate = async () => {
 }
 
 onMounted(() => {
-  onAuthStateChanged(auth, (user) => {
+  unsubscribeAuth = onAuthStateChanged(auth, (user) => {
     currentUser.value = user
     if (user) {
       fetchInventory()
       loadMealsForDate()
+    } else {
+      inventoryItems.value = []
+      mealSlots.value = createEmptyMealSlots()
     }
   })
+})
+
+onUnmounted(() => {
+  unsubscribeAuth?.()
 })
 
 watch(selectedDate, loadMealsForDate)
@@ -560,8 +623,8 @@ watch(selectedDate, loadMealsForDate)
 
 // Create meal form
 const newMealName = ref('')
-const selectedIngredients = ref<{ icon: string; name: string }[]>([])
-const selectedMealSlotForNewMeal = ref('breakfast')
+const selectedIngredients = ref<SelectedIngredient[]>([])
+const selectedMealSlotForNewMeal = ref<MealTypeValue>('breakfast')
 const showIngredientSelector = ref(false)
 const ingredientSearch = ref('')
 const tempSelectedIngredients = ref<Set<string>>(new Set())
@@ -569,7 +632,10 @@ const tempSelectedIngredients = ref<Set<string>>(new Set())
 const filteredInventoryForModal = computed(() => {
   if (!ingredientSearch.value) return inventoryItems.value
   const q = ingredientSearch.value.toLowerCase()
-  return inventoryItems.value.filter((item) => item.name.toLowerCase().includes(q))
+  return inventoryItems.value.filter(
+    (item) =>
+      item.name.toLowerCase().includes(q) || item.location.toLowerCase().includes(q),
+  )
 })
 
 const openIngredientSelector = () => {
@@ -597,10 +663,10 @@ const toggleIngredientSelection = (item: InventoryItem) => {
 const isIngredientSelected = (item: InventoryItem) => tempSelectedIngredients.value.has(item.id)
 
 const confirmIngredientSelection = () => {
-  selectedIngredients.value = Array.from(tempSelectedIngredients.value).map((id) => {
-    const item = inventoryItems.value.find((i) => i.id === id)!
-    return { icon: item.icon, name: item.name }
-  })
+  selectedIngredients.value = Array.from(tempSelectedIngredients.value)
+    .map((id) => inventoryItems.value.find((i) => i.id === id))
+    .filter((item): item is InventoryItem => Boolean(item))
+    .map((item) => ({ id: item.id, icon: item.icon, name: item.name }))
   closeIngredientSelector()
 }
 
@@ -616,9 +682,11 @@ const addMealToPlan = () => {
   const slotType = selectedMealSlotForNewMeal.value
   const slot = mealSlots.value.find((s) => s.type === slotType)
   if (slot) {
-    slot.meal = newMealName.value
+    slot.meal = newMealName.value.trim()
+    slot.ingredientIds = selectedIngredients.value.map((item) => item.id)
     newMealName.value = ''
-    // Optional: also store ingredients? Not needed for prototype
+    selectedIngredients.value = []
+    closeCreateMealPanel()
   }
 }
 
@@ -634,6 +702,7 @@ const planRecommendation = (rec: Recommendation) => {
   const emptySlot = mealSlots.value.find((s) => !s.meal)
   if (emptySlot) {
     emptySlot.meal = rec.name
+    emptySlot.ingredientIds = []
     alert(`"${rec.name}" added to ${emptySlot.label}`)
   } else {
     alert('All slots are filled. Edit one to replace it.')
@@ -667,6 +736,7 @@ const saveMealEdit = () => {
   const slot = mealSlots.value.find((s) => s.type === editingMealSlot.value)
   if (slot) {
     slot.meal = editingMealName.value.trim() || ''
+    if (!slot.meal) slot.ingredientIds = []
   }
   closeMealEdit()
 }
@@ -682,7 +752,16 @@ const saveMealPlan = async () => {
   isLoading.value = true
 
   try {
-    await saveMealToDb(currentUser.value.uid, dateKey!, mealSlots.value, selectedIngredients.value)
+    await saveDailyMealPlan(
+      currentUser.value.uid,
+      dateKey,
+      mealSlots.value.map((slot) => ({
+        mealType: slot.type,
+        recipeName: slot.meal,
+        foodIds: slot.ingredientIds,
+        reservedQuantity: 1,
+      })),
+    )
     alert(`Meal plan for ${formattedSelectedDate.value} saved!`)
   } catch (error) {
     console.error('Error saving meal plan:', error)
