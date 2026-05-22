@@ -157,7 +157,6 @@ const handleLogin = async () => {
 
 <template>
   <div class="auth-container">
-    <!-- BAGIAN KIRI: FORM LOGIN -->
     <div class="left">
       <div class="form-wrapper">
         <img class="logo-image" :src="logoFull" :alt="appName" />
@@ -203,13 +202,13 @@ const handleLogin = async () => {
       </div>
     </div>
 
-    <!-- BAGIAN KANAN: IMMERSIVE CAROUSEL -->
+    <!-- Right: Immersive Carousel -->
     <div
       class="right"
       :style="{ backgroundImage: `url(${loginBackground})` }"
       aria-label="PantryPal highlights"
     >
-      <!-- Overlay Gradien Gelap dari bawah ke atas -->
+      <!-- Dark Gradient Overlay from bottom to top -->
       <div class="carousel-overlay">
 
         <!-- Story Indicators (Progress Bars) -->
@@ -220,7 +219,7 @@ const handleLogin = async () => {
             :key="index"
             @click="goToSlide(index)"
           >
-            <!-- Logika animasi: penuh jika sudah lewat, animasi jika aktif -->
+            <!-- Logic: full if already passed, animate if active -->
             <div
               class="story-progress"
               :class="{
@@ -232,7 +231,7 @@ const handleLogin = async () => {
           </div>
         </div>
 
-        <!-- Carousel Content dengan Animasi Slide Up -->
+        <!-- Carousel Content -->
         <transition name="slide-up" mode="out-in">
           <div class="carousel-content" :key="activeBenefit.title">
             <div class="icon-glass">
@@ -434,7 +433,6 @@ input:disabled {
   text-decoration: underline;
 }
 
-/* --- KANAN: IMMERSIVE CAROUSEL AREA --- */
 .right {
   flex: 1;
   position: relative;
@@ -447,7 +445,6 @@ input:disabled {
 .carousel-overlay {
   position: absolute;
   inset: 0;
-  /* Gradien cinematik, gelap di atas (untuk progress bar) dan sangat gelap di bawah (untuk teks) */
   background: linear-gradient(180deg, rgba(10, 28, 47, 0.4) 0%, rgba(10, 28, 47, 0.1) 40%, rgba(10, 28, 47, 0.95) 100%);
   display: flex;
   flex-direction: column;
@@ -485,7 +482,7 @@ input:disabled {
 }
 
 .story-progress.active {
-  animation: fillProgress 5s linear forwards; /* 5s sesuai dengan slideDuration */
+  animation: fillProgress 5s linear forwards;
 }
 
 @keyframes fillProgress {

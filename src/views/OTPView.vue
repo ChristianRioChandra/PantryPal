@@ -3,6 +3,7 @@ import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import logoFull from '@/assets/logo/full.png'
 import { useAuthStore } from '@/stores/auth'
+import { sendOTPEmail } from '@/services/emailService'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -10,6 +11,7 @@ const authStore = useAuthStore()
 const otp = ref(['', '', '', '', '', ''])
 const inputs = ref<(HTMLInputElement | null)[]>([])
 const error = ref('')
+const successMessage = ref('')
 
 const timer = ref(180)
 let interval: ReturnType<typeof setInterval>
@@ -31,25 +33,67 @@ const formatTime = () => {
   return `${m}:${s.toString().padStart(2, '0')}`
 }
 
-// resend (UI only)
-const resendOTP = () => {
+// resend
+const resendOTP = async () => {
   if (timer.value > 0) return
 
-  alert('OTP resent (check console for now)')
+  error.value = ''
+  successMessage.value = ''
 
-  otp.value = ['', '', '', '', '', '']
-  timer.value = 180
+  const userEmail = localStorage.getItem('otp_email')
+  if (!userEmail) {
+    error.value = 'Email address not found. Please log in again.'
+    return
+  }
+
+  // Generate new 6-digit OTP code
+  const newOtp = Math.floor(100000 + Math.random() * 900000).toString()
+  const expiryTime = Date.now() + 180000
+
+  localStorage.setItem('otp_code', newOtp)
+  localStorage.setItem('otp_expiry', expiryTime.toString())
+
+  try {
+    await sendOTPEmail(userEmail, newOtp)
+    successMessage.value = 'OTP code has been resent to your email!'
+    otp.value = ['', '', '', '', '', '']
+    timer.value = 180
+    
+    // Focus back to first input
+    setTimeout(() => {
+      inputs.value[0]?.focus()
+    }, 50)
+  } catch (err) {
+    console.error('Email error during resend:', err)
+    error.value = 'Failed to send OTP email. Please try again.'
+  }
 }
 
 // input
 const handleInput = (index: number, e: Event) => {
   error.value = ''
+  successMessage.value = ''
 
   const target = e.target as HTMLInputElement
   const value = target.value
 
+  if (value === '') {
+    otp.value[index] = ''
+    return
+  }
+
   if (!/^[0-9]$/.test(value)) {
-    target.value = ''
+    // If multiple characters typed (e.g. key repeat or swift typing), keep only the last numeric digit
+    const digitsOnly = value.replace(/\D/g, '')
+    if (digitsOnly.length > 0) {
+      const lastDigit = digitsOnly[digitsOnly.length - 1]!
+      otp.value[index] = lastDigit
+      target.value = lastDigit
+      if (index < 5) inputs.value[index + 1]?.focus()
+    } else {
+      // Revert field to its original stored digit
+      target.value = otp.value[index]
+    }
     return
   }
 
@@ -58,16 +102,57 @@ const handleInput = (index: number, e: Event) => {
   if (index < 5) inputs.value[index + 1]?.focus()
 }
 
-// backspace
+// backspace and arrow navigation
 const handleKeydown = (index: number, e: KeyboardEvent) => {
-  if (e.key === 'Backspace' && !otp.value[index] && index > 0) {
+  if (e.key === 'Backspace') {
+    if (!otp.value[index]) {
+      // If current field is empty, delete the previous one and focus it
+      if (index > 0) {
+        otp.value[index - 1] = ''
+        inputs.value[index - 1]?.focus()
+      }
+    } else {
+      // If current field has a value, delete it
+      otp.value[index] = ''
+    }
+  } else if (e.key === 'ArrowLeft' && index > 0) {
     inputs.value[index - 1]?.focus()
+  } else if (e.key === 'ArrowRight' && index < 5) {
+    inputs.value[index + 1]?.focus()
   }
+}
+
+// paste handler
+const handlePaste = (e: ClipboardEvent) => {
+  e.preventDefault()
+  const pasteData = e.clipboardData?.getData('text') || ''
+  
+  // Extract only numbers and take up to 6 digits
+  const digits = pasteData.replace(/\D/g, '').slice(0, 6).split('')
+  
+  if (digits.length === 0) return
+
+  // Fill in the otp fields
+  for (let i = 0; i < 6; i++) {
+    if (i < digits.length) {
+      otp.value[i] = digits[i]!
+    } else {
+      otp.value[i] = ''
+    }
+  }
+
+  error.value = ''
+  successMessage.value = ''
+
+  // Focus the last entered digit or 6th input if full
+  const focusIndex = Math.min(digits.length - 1, 5)
+  inputs.value[focusIndex]?.focus()
 }
 
 // verify
 const verifyOTP = () => {
   error.value = ''
+  successMessage.value = ''
 
   const finalOTP = otp.value.join('')
   const savedOTP = localStorage.getItem('otp_code')
@@ -125,13 +210,14 @@ onUnmounted(() => {
       <p>Enter the 6-digit code</p>
 
       <!-- OTP BOX -->
-      <div class="otp-box">
+      <div class="otp-box" @paste="handlePaste">
         <input
           v-for="(digit, index) in otp"
           :key="index"
           type="text"
           maxlength="1"
           class="otp-input"
+          :value="otp[index]"
           @input="handleInput(index, $event)"
           @keydown="handleKeydown(index, $event)"
           :ref="
@@ -143,6 +229,7 @@ onUnmounted(() => {
       </div>
 
       <p v-if="error" class="error">{{ error }}</p>
+      <p v-if="successMessage" class="success">{{ successMessage }}</p>
 
       <!-- TIMER -->
       <p class="timer">
@@ -238,11 +325,19 @@ button {
 
 button:disabled {
   background: #e5e7eb;
-  cursor: not-allowed;
+    cursor: not-allowed;
   opacity: 0.9;
 }
 
 .error {
   color: red;
+  font-size: 14px;
+  margin-bottom: 10px;
+}
+
+.success {
+  color: #22c55e;
+  font-size: 14px;
+  margin-bottom: 10px;
 }
 </style>

@@ -148,7 +148,7 @@ const handleRegister = async () => {
         // doesn't redirect to dashboard when we push to /login.
         await auth.signOut()
         success.value = 'Account created! Please check your email to verify. (Note: Profile setup had a minor issue, but you can still log in.)'
-        
+
         setTimeout(() => {
           router.push('/login')
         }, 4000)
@@ -320,7 +320,6 @@ const handleRegister = async () => {
 .auth-container {
   display: flex;
   height: 100vh;
-  /* Mengubah background luar menjadi abu-abu kebiruan yang sangat muda */
   background: #f1f5f9;
 }
 
@@ -335,17 +334,16 @@ const handleRegister = async () => {
 
 .form-wrapper {
   width: 100%;
-  max-width: 460px; /* Dibuat sedikit lebih lebar dari login karena formnya lebih banyak */
+  max-width: 460px;
   display: flex;
   flex-direction: column;
 
-  /* --- MENGEMBALIKAN KOTAK CARD --- */
-  background: #ffffff; /* Warna dalam kotak putih bersih */
+  background: #ffffff;
   padding: 48px 40px;
   border-radius: 24px;
-  box-shadow: 0 12px 32px rgba(31, 47, 62, 0.08); /* Efek bayangan super halus */
-  border: 1px solid rgba(226, 232, 240, 0.8); /* Garis batas tipis */
-  margin: auto 0; /* Membantu form tetap di tengah saat di-scroll */
+  box-shadow: 0 12px 32px rgba(31, 47, 62, 0.08);
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  margin: auto 0;
 }
 
 .logo-image {
