@@ -109,13 +109,24 @@ export async function getActiveListings(): Promise<DonationListing[]> {
 // ─── Get User's Own Listings ──────────────────────────────────────────────────
 
 export async function getUserListings(uid: string): Promise<DonationListing[]> {
-  const q = query(
-    collection(db, LISTING_COL),
-    where('user_id', '==', uid),
-    orderBy('created_at', 'desc'),
-  )
+  const q = query(collection(db, LISTING_COL), where('user_id', '==', uid))
   const snap = await getDocs(q)
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as DonationListing)
+  return snap.docs
+    .map((d) => ({ id: d.id, ...d.data() }) as DonationListing)
+    .sort((a, b) => toListingTimestamp(b.created_at) - toListingTimestamp(a.created_at))
+}
+
+function toListingTimestamp(value: unknown): number {
+  if (
+    typeof value === 'object' &&
+    value !== null &&
+    'toDate' in value &&
+    typeof (value as { toDate?: unknown }).toDate === 'function'
+  ) {
+    return (value as { toDate: () => Date }).toDate().getTime()
+  }
+  const parsed = new Date(String(value)).getTime()
+  return Number.isNaN(parsed) ? 0 : parsed
 }
 
 // ─── Get Single Listing ───────────────────────────────────────────────────────

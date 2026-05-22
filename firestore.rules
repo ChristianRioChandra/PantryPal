@@ -87,6 +87,20 @@ service cloud.firestore {
     // Fields:
     //   - name: string (required, 1..60)
     //
+    // Collection: food_actions
+    // Fields:
+    //   - user_id: string (required, immutable, owner uid)
+    //   - food_id: string (required, immutable)
+    //   - kind: string (required enum: finished|wasted)
+    //   - name: string (required, 1..80)
+    //   - category: string (required, 1..80)
+    //   - food_type: string (required, 1..40)
+    //   - quantity: number (required, > 0)
+    //   - unit: string (required, 1..20)
+    //   - expiry_date: string (required, YYYY-MM-DD)
+    //   - was_expired: bool (required)
+    //   - actioned_at: timestamp (required, immutable)
+    //
     // ===============================================================
     // Helper Functions
     // ===============================================================
@@ -150,6 +164,39 @@ service cloud.firestore {
 
     function isValidRequestStatus(value) {
       return value in ['pending', 'confirmed', 'rejected'];
+    }
+
+    function isValidFoodActionKind(value) {
+      return value in ['finished', 'wasted'];
+    }
+
+    function isValidFoodActionDoc(data, userId) {
+      return data.keys().hasOnly([
+          'user_id',
+          'food_id',
+          'kind',
+          'name',
+          'category',
+          'food_type',
+          'quantity',
+          'unit',
+          'expiry_date',
+          'was_expired',
+          'actioned_at',
+        ]) &&
+        data.user_id == userId &&
+        isNonEmptyString(data.food_id, 120) &&
+        isValidFoodActionKind(data.kind) &&
+        isNonEmptyString(data.name, 80) &&
+        isNonEmptyString(data.category, 80) &&
+        isNonEmptyString(data.food_type, 40) &&
+        data.quantity is number &&
+        data.quantity > 0 &&
+        data.quantity <= 1000000 &&
+        isNonEmptyString(data.unit, 20) &&
+        isIsoDate(data.expiry_date) &&
+        data.was_expired is bool &&
+        data.actioned_at is timestamp;
     }
 
     function validPrivacySettings(data) {
@@ -410,6 +457,15 @@ service cloud.firestore {
         request.resource.data.created_at == resource.data.created_at;
 
       allow delete: if signedIn() && isOwner(resource.data.user_id);
+    }
+
+    match /food_actions/{actionId} {
+      allow create: if signedIn() &&
+        isValidFoodActionDoc(request.resource.data, request.auth.uid);
+
+      allow read: if signedIn() && isOwner(resource.data.user_id);
+
+      allow update, delete: if false;
     }
 
     match /mealPlans/{mealPlanId} {

@@ -94,6 +94,20 @@ export async function getUserMealPlans(uid: string): Promise<MealPlan[]> {
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as MealPlan)
 }
 
+export async function getUserMealPlansWithItems(
+  uid: string,
+): Promise<Array<MealPlan & { items: MealPlanItem[] }>> {
+  const plans = await getUserMealPlans(uid)
+  const plansWithItems = await Promise.all(
+    plans.map(async (plan) => ({
+      ...plan,
+      items: await getMealPlanItems(plan.id),
+    })),
+  )
+
+  return plansWithItems
+}
+
 // ─── Get Meal Plan by Date ────────────────────────────────────────────────────
 
 export async function getMealPlanByDate(uid: string, date: string): Promise<MealPlan | null> {

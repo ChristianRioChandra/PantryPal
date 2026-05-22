@@ -1057,6 +1057,7 @@ import {
 } from '@/services/foodService'
 import { createDonationListing } from '@/services/donationService'
 import { addLocalAnalyticsEvent, addLocalAnalyticsEvents } from '@/services/localAnalyticsStore'
+import { dispatchAnalyticsUpdated } from '@/utils/analyticsEvents'
 import {
   getInventoryUiPrefs,
   updateInventoryUiPrefs,
@@ -1405,6 +1406,7 @@ function recordInventoryAnalytics(item: InventoryItem, kind: 'used' | 'donated')
     quantity: getVolumeQuantity(item.volume),
     unit: getVolumeUnit(item.volume),
   })
+  dispatchAnalyticsUpdated()
 }
 
 // ---------- Computed ----------
@@ -2071,6 +2073,7 @@ async function confirmAdd() {
   }
 
   closeAddModal()
+  dispatchAnalyticsUpdated()
   lastAddedItemName.value = itemName
   showSuccessPopup.value = true
 

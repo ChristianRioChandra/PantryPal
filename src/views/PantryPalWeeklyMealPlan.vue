@@ -159,14 +159,40 @@
                     <!-- Right Column: Recommendations -->
                     <div class="recommendations-section">
                       <div class="section-header">
-                        <div class="section-label">AI RECOMMENDATIONS</div>
-                        <span class="reco-count">{{ recommendations.length }} items</span>
+                        <div class="section-label">RECOMMENDATIONS</div>
+                        <span class="reco-count">
+                          {{ recommendationsLoading ? 'Loading' : `${recommendations.length} items` }}
+                        </span>
                       </div>
 
                       <div class="recommendations-scroll">
-                        <div v-for="rec in recommendations" :key="rec.id" class="premium-reco-card">
+                        <div v-if="recommendationsLoading" class="reco-state">
+                          <i class="bi bi-arrow-repeat spin"></i>
+                          <span>Finding meals from your inventory…</span>
+                        </div>
+                        <div v-else-if="recommendationsError" class="reco-state reco-state-error">
+                          <i class="bi bi-exclamation-circle"></i>
+                          <span>{{ recommendationsError }}</span>
+                        </div>
+                        <div v-else-if="!recommendations.length" class="reco-state">
+                          <i class="bi bi-basket"></i>
+                          <span>
+                            {{
+                              inventoryItems.length
+                                ? 'No matching recipes found. Try names like Chicken, Milk, or Rice.'
+                                : 'Add items to your inventory to get recipe suggestions.'
+                            }}
+                          </span>
+                        </div>
+                        <div v-for="rec in recommendations" v-else :key="rec.id" class="premium-reco-card">
                           <div class="reco-visual">
-                            <span class="reco-emoji">{{ rec.icon }}</span>
+                            <img
+                              v-if="rec.imageUrl"
+                              :src="rec.imageUrl"
+                              :alt="rec.name"
+                              class="reco-thumb"
+                            />
+                            <span v-else class="reco-emoji">{{ rec.icon }}</span>
                           </div>
                           <div class="reco-details">
                             <div class="reco-top">
@@ -340,9 +366,14 @@ import { getUserFoodItems, type FoodItem } from '@/services/foodService'
 import {
   getMealPlanByDate,
   getMealPlanItems,
+  getUserMealPlansWithItems,
   saveDailyMealPlan,
   type MealTypeValue,
 } from '@/services/mealPlanService'
+import {
+  fetchMealRecommendations,
+  type MealRecommendation,
+} from '@/services/mealRecommendationService'
 
 // Types
 interface InventoryItem {
@@ -356,12 +387,7 @@ interface InventoryItem {
   warning?: boolean
 }
 
-interface Recommendation {
-  id: number
-  icon: string
-  name: string
-  uses: string
-}
+type Recommendation = MealRecommendation
 
 interface MealSlot {
   type: MealTypeValue
@@ -558,6 +584,7 @@ const fetchInventory = async () => {
           tag: diffDays >= 0 ? `${diffDays}d` : 'Expired',
         }
       })
+    await loadRecommendations()
   } catch (error) {
     console.error('Error fetching inventory:', error)
   }
@@ -615,7 +642,10 @@ onUnmounted(() => {
   unsubscribeAuth?.()
 })
 
-watch(selectedDate, loadMealsForDate)
+watch(selectedDate, () => {
+  loadMealsForDate()
+  loadRecommendations()
+})
 
 // Inventory
 
@@ -668,10 +698,12 @@ const confirmIngredientSelection = () => {
     .filter((item): item is InventoryItem => Boolean(item))
     .map((item) => ({ id: item.id, icon: item.icon, name: item.name }))
   closeIngredientSelector()
+  loadRecommendations()
 }
 
 const removeIngredient = (index: number) => {
   selectedIngredients.value.splice(index, 1)
+  loadRecommendations()
 }
 
 const addMealToPlan = () => {
@@ -690,19 +722,78 @@ const addMealToPlan = () => {
   }
 }
 
-// Recommendations
-const recommendations = ref<Recommendation[]>([
+// Recommendations (TheMealDB when available, hardcoded fallbacks otherwise)
+const fallbackRecommendations: Recommendation[] = [
   { id: 1, icon: '🍛', name: 'Nasi Goreng', uses: 'Rice, Eggs, Chicken' },
   { id: 2, icon: '🍜', name: 'Mie Goreng', uses: 'Noodles, Eggs, Veggies' },
   { id: 3, icon: '🥞', name: 'Milk Pancakes', uses: 'UltraMilk, Eggs, Flour' },
-])
+]
+
+const recommendations = ref<Recommendation[]>([...fallbackRecommendations])
+const recommendationsLoading = ref(false)
+const recommendationsError = ref<string | null>(null)
+
+const getRecommendationIngredientIds = (rec: Recommendation) => {
+  const matchTerms = [
+    ...(rec.matchedIngredients ?? []),
+    ...rec.uses.split(',').map((ingredient) => ingredient.trim()),
+  ]
+    .map((term) => term.toLowerCase())
+    .filter(Boolean)
+
+  return inventoryItems.value
+    .filter((item) => {
+      const itemName = item.name.toLowerCase()
+      return matchTerms.some(
+        (term) =>
+          itemName.includes(term) ||
+          term.includes(itemName.split(/[·,(]/)[0]!.trim().toLowerCase()),
+      )
+    })
+    .map((item) => item.id)
+}
+
+const loadRecommendations = async () => {
+  recommendationsLoading.value = true
+  recommendationsError.value = null
+  try {
+    const apiRecommendations = await fetchMealRecommendations({
+      date: getDateKey(selectedDate.value),
+      inventory: inventoryItems.value.map((item) => ({
+        id: item.id,
+        name: item.name,
+        location: item.location,
+        expiry: item.expiry,
+        warning: item.warning,
+      })),
+      selectedIngredients: selectedIngredients.value.map((item) => item.name),
+    })
+
+    if (apiRecommendations?.length) {
+      recommendations.value = apiRecommendations
+    } else {
+      recommendations.value = [...fallbackRecommendations]
+    }
+  } catch (error) {
+    console.error('Error loading meal recommendations:', error)
+    recommendations.value = [...fallbackRecommendations]
+    recommendationsError.value = null
+  } finally {
+    recommendationsLoading.value = false
+  }
+}
+
+const refreshRecommendationsForAction = async () => {
+  await loadRecommendations()
+  return recommendations.value.length > 0
+}
 
 const planRecommendation = (rec: Recommendation) => {
   // Find first empty slot
   const emptySlot = mealSlots.value.find((s) => !s.meal)
   if (emptySlot) {
     emptySlot.meal = rec.name
-    emptySlot.ingredientIds = []
+    emptySlot.ingredientIds = getRecommendationIngredientIds(rec)
     alert(`"${rec.name}" added to ${emptySlot.label}`)
   } else {
     alert('All slots are filled. Edit one to replace it.')
@@ -771,15 +862,149 @@ const saveMealPlan = async () => {
   }
 }
 
-// Right sidebar actions
-const planWeekNavigate = () => alert('Week planning mode (prototype)')
-const shoppingListNavigate = () => alert('Shopping list generated (prototype)')
-const favoriteMealsNavigate = () => alert('Favorite meals view (prototype)')
+const getWeekStart = (date: Date) => {
+  const start = new Date(date)
+  start.setHours(0, 0, 0, 0)
+  start.setDate(start.getDate() - start.getDay())
+  return start
+}
+
+const planWeekNavigate = async () => {
+  if (!currentUser.value) {
+    alert('Please log in to plan your week.')
+    return
+  }
+
+  const hasRecommendations = await refreshRecommendationsForAction()
+  if (!hasRecommendations) {
+    alert('No meal recommendations are available yet. Add inventory items and try again.')
+    return
+  }
+
+  const ok = window.confirm(
+    'Generate a simple 7-day meal plan from TheMealDB recommendations? This will replace meal plans for this week.',
+  )
+  if (!ok) return
+
+  const weekStart = getWeekStart(selectedDate.value)
+  isLoading.value = true
+
+  try {
+    await Promise.all(
+      Array.from({ length: 7 }, (_, dayOffset) => {
+        const date = new Date(weekStart)
+        date.setDate(weekStart.getDate() + dayOffset)
+        const dateKey = getDateKey(date)
+        const slots = createEmptyMealSlots().map((slot, slotIndex) => {
+          const rec =
+            recommendations.value[
+              (dayOffset * 4 + slotIndex) % recommendations.value.length
+            ]!
+          return {
+            mealType: slot.type,
+            recipeName: rec.name,
+            foodIds: getRecommendationIngredientIds(rec),
+            reservedQuantity: 1,
+          }
+        })
+
+        return saveDailyMealPlan(currentUser.value!.uid, dateKey, slots)
+      }),
+    )
+
+    currentDate.value = new Date(weekStart.getFullYear(), weekStart.getMonth(), 1)
+    selectedDate.value = new Date(weekStart)
+    await loadMealsForDate()
+    alert('Weekly meal plan generated.')
+  } catch (error) {
+    console.error('Error generating weekly meal plan:', error)
+    alert('Failed to generate weekly meal plan. Please try again.')
+  } finally {
+    isLoading.value = false
+  }
+}
+
+const shoppingListNavigate = async () => {
+  await refreshRecommendationsForAction()
+
+  const plannedMealNames = mealSlots.value
+    .map((slot) => slot.meal.trim())
+    .filter((mealName) => mealName.length > 0)
+
+  if (!plannedMealNames.length) {
+    alert('Plan at least one meal first, then I can generate a shopping list.')
+    return
+  }
+
+  const inventoryNames = inventoryItems.value.map((item) => item.name.toLowerCase())
+  const missingIngredients = new Set<string>()
+
+  plannedMealNames.forEach((mealName) => {
+    const recommendation = recommendations.value.find(
+      (rec) => rec.name.toLowerCase() === mealName.toLowerCase(),
+    )
+    if (!recommendation) return
+
+    recommendation.uses.split(',').forEach((ingredient) => {
+      const normalizedIngredient = ingredient.trim()
+      if (!normalizedIngredient) return
+      const hasIngredient = inventoryNames.some((name) =>
+        name.includes(normalizedIngredient.toLowerCase()),
+      )
+      if (!hasIngredient) missingIngredients.add(normalizedIngredient)
+    })
+  })
+
+  if (!missingIngredients.size) {
+    alert('Shopping list is clear. Your inventory covers the planned recommendation meals.')
+    return
+  }
+
+  alert(`Shopping List:\n- ${Array.from(missingIngredients).join('\n- ')}`)
+}
+
+const favoriteMealsNavigate = async () => {
+  if (!currentUser.value) {
+    alert('Please log in to view favorite meals.')
+    return
+  }
+
+  try {
+    const plans = await getUserMealPlansWithItems(currentUser.value.uid)
+    const mealCounts = new Map<string, number>()
+
+    plans.forEach((plan) => {
+      plan.items.forEach((item) => {
+        if (!item.recipe_name) return
+        mealCounts.set(item.recipe_name, (mealCounts.get(item.recipe_name) ?? 0) + 1)
+      })
+    })
+
+    const favoriteMeals = Array.from(mealCounts.entries())
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .slice(0, 5)
+
+    if (!favoriteMeals.length) {
+      alert('No favorite meals yet. Save a few meal plans first.')
+      return
+    }
+
+    alert(
+      `Favorite Meals:\n${favoriteMeals
+        .map(([meal, count], index) => `${index + 1}. ${meal} (${count} planned)`)
+        .join('\n')}`,
+    )
+  } catch (error) {
+    console.error('Error loading favorite meals:', error)
+    alert('Failed to load favorite meals. Please try again.')
+  }
+}
 
 const showCreateMealPanel = ref(false)
 
 const openCreateMealPanel = () => {
   showCreateMealPanel.value = true
+  loadRecommendations()
 }
 
 const closeCreateMealPanel = () => {
@@ -1561,6 +1786,8 @@ hr {
   padding: 32px;
   display: flex;
   flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .section-header {
@@ -1581,6 +1808,8 @@ hr {
 
 .recommendations-scroll {
   flex: 1;
+  min-height: 0;
+  max-height: 350px;
   overflow-y: auto;
   padding-right: 8px;
 }
@@ -1613,6 +1842,48 @@ hr {
   justify-content: center;
   font-size: 1.8rem;
   flex-shrink: 0;
+  overflow: hidden;
+}
+
+.reco-thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.reco-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 32px 16px;
+  text-align: center;
+  color: #64748b;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.reco-state i {
+  font-size: 1.5rem;
+  color: #94a3b8;
+}
+
+.reco-state-error i {
+  color: #ef4444;
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .reco-details {
