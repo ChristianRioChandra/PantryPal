@@ -210,47 +210,10 @@
           </div>
 
           <div class="form-section">
-            <label class="field-label">Quantity Level</label>
-            <div class="qty-progress-wrapper">
-              <div class="qty-progress-bar">
-                <div
-                  class="qty-progress-fill"
-                  :style="{ width: qtyProgress.percent, background: qtyProgress.color }"
-                ></div>
-              </div>
-              <div class="qty-progress-label">{{ qtyProgress.label }}</div>
-            </div>
 
-            <div class="quantity-selector" id="modalQtySelector">
-              <div
-                class="qty-option low"
-                :class="{ selected: selectedQuantityLevel === 'low' }"
-                @click="setQuantityLevel('low')"
-              >
-                Low
-              </div>
-              <div
-                class="qty-option half"
-                :class="{ selected: selectedQuantityLevel === 'half' }"
-                @click="setQuantityLevel('half')"
-              >
-                Half
-              </div>
-              <div
-                class="qty-option high"
-                :class="{ selected: selectedQuantityLevel === 'high' }"
-                @click="setQuantityLevel('high')"
-              >
-                High
-              </div>
-              <div
-                class="qty-option full"
-                :class="{ selected: selectedQuantityLevel === 'full' }"
-                @click="setQuantityLevel('full')"
-              >
-                Full
-              </div>
-            </div>
+
+
+
           </div>
 
           <div class="modal-actions">
@@ -1380,7 +1343,7 @@ function mapFoodToInventoryItem(item: FoodItem): InventoryItem {
   const days = calculateDaysUntil(rawExpiryDate)
   return {
     id: item.id,
-    name: item.name || 'Unnamed Item',
+    name: (item.name || 'Unnamed Item').trim(),
     description: typeof notes === 'string' ? notes : '',
     volume,
     location:
@@ -1454,9 +1417,17 @@ function applyFilters(items: InventoryItem[]): InventoryItem[] {
     )
   }
   items.sort((a, b) => {
-    if (currentSort.value === 'expiry') return a.expiryDays - b.expiryDays
-    if (currentSort.value === 'category') return a.category.localeCompare(b.category)
-    return a.name.localeCompare(b.name)
+    if (currentSort.value === 'expiry') {
+      const diff = a.expiryDays - b.expiryDays
+      if (diff !== 0) return diff
+      return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
+    }
+    if (currentSort.value === 'category') {
+      const diff = a.category.localeCompare(b.category)
+      if (diff !== 0) return diff
+      return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
+    }
+    return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
   })
   return items
 }
@@ -1479,13 +1450,7 @@ function getNearExpiryItems(): InventoryItem[] {
   let items = inventory.value.filter((i) => i.expiryDays <= 3)
   if (activeLocations.value.size > 0)
     items = items.filter((i) => activeLocations.value.has(i.category))
-  if (activeFoodTypes.value.size > 0)
-    items = items.filter((i) => activeFoodTypes.value.has(i.foodType))
-  if (searchQuery.value) {
-    const q = searchQuery.value.toLowerCase()
-    items = items.filter((i) => ` ${i.name} ${i.volume} ${i.foodType} `.toLowerCase().includes(q))
-  }
-  return items
+  return applyFilters(items)
 }
 
 function getNearExpiryCount(): number {
@@ -3880,13 +3845,6 @@ footer {
   gap: 12px;
 }
 
-.mobile-bulk-action-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-}
-
 .mobile-bulk-controls {
   display: flex;
   align-items: center;
@@ -4188,6 +4146,13 @@ footer {
 
   .layout-toggle {
     width: 100%;
+  }
+
+  .mobile-bulk-action-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
   }
 }
 

@@ -276,13 +276,13 @@ service cloud.firestore {
         isNonEmptyString(data.unit, 20) &&
         isIsoDate(data.expiry_date) &&
         isValidStorageType(data.type) &&
-        isOptionalStringOrNull(data.storage_location, 80) &&
-        isOptionalStringOrNull(data.notes, 500) &&
+        isOptionalStringOrNull(data.get('storage_location', null), 80) &&
+        isOptionalStringOrNull(data.get('notes', null), 500) &&
         isValidFoodStatus(data.status) &&
         isValidQuantityLevel(data.quantity_level) &&
-        (data.reserved_quantity == null || (data.reserved_quantity is number && data.reserved_quantity >= 0 && data.reserved_quantity <= 1000000)) &&
+        (data.get('reserved_quantity', null) == null || (data.get('reserved_quantity', null) is number && data.get('reserved_quantity', null) >= 0 && data.get('reserved_quantity', null) <= 1000000)) &&
         data.created_at is timestamp &&
-        isOptionalStringOrNull(data.category_id, 80);
+        isOptionalStringOrNull(data.get('category_id', null), 80);
     }
 
     function isValidMealPlanDoc(data, userId) {
@@ -290,7 +290,7 @@ service cloud.firestore {
         data.user_id == userId &&
         isOwner(userId) &&
         isIsoDate(data.date) &&
-        isOptionalStringOrNull(data.description, 500) &&
+        isOptionalStringOrNull(data.get('description', null), 500) &&
         data.created_at is timestamp;
     }
 
@@ -310,7 +310,7 @@ service cloud.firestore {
         data.reserved_quantity is number &&
         data.reserved_quantity > 0 &&
         data.reserved_quantity <= 1000000 &&
-        isOptionalStringOrNull(data.recipe_name, 120);
+        isOptionalStringOrNull(data.get('recipe_name', null), 120);
     }
 
     function isValidNotificationDoc(data) {
@@ -328,8 +328,8 @@ service cloud.firestore {
         isValidNotificationType(data.type) &&
         isNonEmptyString(data.message, 300) &&
         data.is_read is bool &&
-        isOptionalStringOrNull(data.related_entity_id, 120) &&
-        (data.get('email_sent', null) == null || data.email_sent is bool) &&
+        isOptionalStringOrNull(data.get('related_entity_id', null), 120) &&
+        (data.get('email_sent', null) == null || data.get('email_sent', null) is bool) &&
         data.created_at is timestamp;
     }
 
@@ -352,7 +352,7 @@ service cloud.firestore {
         isOwner(data.user_id) &&
         isNonEmptyString(data.food_id, 120) &&
         isNonEmptyString(data.title, 120) &&
-        isOptionalStringOrNull(data.description, 500) &&
+        isOptionalStringOrNull(data.get('description', null), 500) &&
         data.quantity is number &&
         data.quantity > 0 &&
         data.quantity <= 1000000 &&
@@ -378,7 +378,7 @@ service cloud.firestore {
         isNonEmptyString(data.listing_id, 120) &&
         isValidRequestStatus(data.status) &&
         data.requested_at is timestamp &&
-        (data.confirmed_at == null || data.confirmed_at is timestamp);
+        (data.get('confirmed_at', null) == null || data.get('confirmed_at', null) is timestamp);
     }
 
     function isValidCategoryDoc(data) {
