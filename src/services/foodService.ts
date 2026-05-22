@@ -169,14 +169,25 @@ export async function getFoodActions(
   uid: string,
   kind?: FoodActionKindValue,
 ): Promise<FoodAction[]> {
-  const constraints = [
-    where('user_id', '==', uid),
-    orderBy('actioned_at', 'desc'),
-  ]
-  if (kind) constraints.splice(1, 0, where('kind', '==', kind))
-  const q = query(collection(db, FOOD_ACTIONS_COL), ...constraints)
+  const q = query(collection(db, FOOD_ACTIONS_COL), where('user_id', '==', uid))
   const snap = await getDocs(q)
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() } as FoodAction))
+  return snap.docs
+    .map((d) => ({ id: d.id, ...d.data() } as FoodAction))
+    .filter((action) => (kind ? action.kind === kind : true))
+    .sort((a, b) => toActionTimestamp(b.actioned_at) - toActionTimestamp(a.actioned_at))
+}
+
+function toActionTimestamp(value: unknown): number {
+  if (
+    typeof value === 'object' &&
+    value !== null &&
+    'toDate' in value &&
+    typeof (value as { toDate?: unknown }).toDate === 'function'
+  ) {
+    return (value as { toDate: () => Date }).toDate().getTime()
+  }
+  const parsed = new Date(String(value)).getTime()
+  return Number.isNaN(parsed) ? 0 : parsed
 }
 
 // ─── Delete Food Item ─────────────────────────────────────────────────────────

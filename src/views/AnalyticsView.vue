@@ -54,7 +54,11 @@
             </label>
           </section>
 
-          <div v-if="statusMessage" class="status-message">
+          <div v-if="isLoadingAnalytics" class="status-message">
+            <i class="bi bi-arrow-repeat spin"></i>
+            <span>Loading analytics from your account…</span>
+          </div>
+          <div v-else-if="statusMessage" class="status-message">
             <i class="bi bi-info-circle"></i>
             <span>{{ statusMessage }}</span>
           </div>
@@ -171,21 +175,22 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import type { NavItem } from '@/components/BaseSidebar.vue'
 import BaseSidebar from '@/components/BaseSidebar.vue'
 import BaseTopbar from '@/components/BaseTopbar.vue'
 import { auth } from '@/firebase'
-import { FoodStatus, getUserFoodItems, type FoodItem } from '@/services/foodService'
-import { getUserListings, type DonationListing } from '@/services/donationService'
+import { fetchPantrySnapshot, fetchUserAnalyticsEvents } from '@/services/analyticsService'
 import {
   getLocalAnalyticsEvents,
   type LocalAnalyticsEvent,
   type LocalAnalyticsKind,
 } from '@/services/localAnalyticsStore'
+import { ANALYTICS_UPDATED_EVENT } from '@/utils/analyticsEvents'
 import { onAuthStateChanged } from 'firebase/auth'
 
 type DateRange = 'weekly' | 'monthly' | 'custom'
-type AnalyticsSource = 'inventory' | 'firebase' | 'sample'
+type AnalyticsSource = 'inventory' | 'firebase'
 
 interface AnalyticsEvent {
   id: string
@@ -236,6 +241,10 @@ const customStartDate = ref(toDateInputValue(sevenDaysAgo))
 const customEndDate = ref(toDateInputValue(today))
 const allEvents = ref<AnalyticsEvent[]>([])
 const statusMessage = ref('')
+const isLoadingAnalytics = ref(false)
+const pantryTotalItems = ref(0)
+const pantryExpiringSoon = ref(0)
+const route = useRoute()
 const trendChart = ref<HTMLCanvasElement | null>(null)
 const categoryChart = ref<HTMLCanvasElement | null>(null)
 let unsubscribeAuth: (() => void) | null = null
@@ -329,10 +338,13 @@ const metricCards = computed(() => [
     tone: 'avoided',
   },
   {
-    label: 'Category Filter',
-    value: selectedCategory.value === 'all' ? 'All' : formatCategory(selectedCategory.value),
-    detail: activeRangeLabel.value,
-    icon: 'bi bi-funnel',
+    label: 'Items in Inventory',
+    value: `${pantryTotalItems.value} items`,
+    detail:
+      pantryExpiringSoon.value > 0
+        ? `${pantryExpiringSoon.value} expiring within 3 days`
+        : 'Live count from your pantry',
+    icon: 'bi bi-box-seam',
     tone: 'category',
   },
 ])
@@ -448,62 +460,80 @@ onMounted(() => {
   unsubscribeAuth = onAuthStateChanged(auth, () => {
     void loadAnalyticsData()
   })
+  window.addEventListener(ANALYTICS_UPDATED_EVENT, handleAnalyticsUpdate)
   window.addEventListener('storage', handleStorageUpdate)
   window.addEventListener('resize', drawCharts)
 })
 
 onUnmounted(() => {
   unsubscribeAuth?.()
+  window.removeEventListener(ANALYTICS_UPDATED_EVENT, handleAnalyticsUpdate)
   window.removeEventListener('storage', handleStorageUpdate)
   window.removeEventListener('resize', drawCharts)
 })
+
+watch(
+  () => route.name,
+  (name) => {
+    if (name === 'analytics') void loadAnalyticsData()
+  },
+)
 
 function setDateRange(range: DateRange) {
   dateRange.value = range
 }
 
 async function loadAnalyticsData() {
-  const localEvents = getLocalAnalyticsEvents().map(mapLocalEvent)
-  let firebaseEvents: AnalyticsEvent[] = []
-  let message = ''
+  isLoadingAnalytics.value = true
+  statusMessage.value = ''
 
   try {
-    if (auth.currentUser) {
-      firebaseEvents = await loadFirebaseEvents(auth.currentUser.uid)
+    const user = auth.currentUser
+    if (!user) {
+      allEvents.value = getLocalAnalyticsEvents().map(mapLocalEvent)
+      pantryTotalItems.value = 0
+      pantryExpiringSoon.value = 0
+      statusMessage.value = allEvents.value.length
+        ? 'Sign in to sync analytics with your Firebase account.'
+        : 'Sign in to view analytics from your inventory activity.'
+      return
     }
-  } catch {
-    message = 'Cloud analytics could not be loaded, so local inventory activity is shown.'
-  }
 
-  const combinedEvents = [...localEvents, ...firebaseEvents]
+    const [firebaseEventsRaw, pantrySnapshot] = await Promise.all([
+      fetchUserAnalyticsEvents(user.uid),
+      fetchPantrySnapshot(user.uid),
+    ])
 
-  if (combinedEvents.length > 0) {
-    allEvents.value = combinedEvents
-    statusMessage.value = message
+    pantryTotalItems.value = pantrySnapshot.totalItems
+    pantryExpiringSoon.value = pantrySnapshot.expiringSoon
+
+    allEvents.value = firebaseEventsRaw.map((event) => ({
+      ...event,
+      source: 'firebase' as const,
+    }))
+
+    if (!allEvents.value.length) {
+      statusMessage.value =
+        pantryTotalItems.value > 0
+          ? `Tracking ${pantryTotalItems.value} pantry items. Finish or donate items to record saved and donated activity.`
+          : 'No saved or donated activity yet. Finish or donate items in Inventory to track them here.'
+    } else {
+      statusMessage.value = ''
+    }
+  } catch (error) {
+    console.error('Failed to load Firebase analytics:', error)
+    const localEvents = getLocalAnalyticsEvents().map(mapLocalEvent)
+    allEvents.value = localEvents
+    pantryTotalItems.value = 0
+    pantryExpiringSoon.value = 0
+    statusMessage.value = localEvents.length
+      ? 'Could not reach Firebase. Showing activity saved on this device only.'
+      : 'Could not load analytics. Check your connection and try again.'
+  } finally {
+    isLoadingAnalytics.value = false
     await nextTick()
     drawCharts()
-    return
   }
-
-  allEvents.value = createSampleEvents()
-  statusMessage.value =
-    'Showing sample analytics. Finish or donate inventory items to populate this report.'
-  await nextTick()
-  drawCharts()
-}
-
-async function loadFirebaseEvents(uid: string): Promise<AnalyticsEvent[]> {
-  const [foodItems, donationListings] = await Promise.all([
-    getUserFoodItems(uid),
-    getUserListings(uid),
-  ])
-  const foodById = new Map(foodItems.map((food) => [food.id, food]))
-  const foodEvents = foodItems
-    .map(mapFoodItem)
-    .filter((event): event is AnalyticsEvent => Boolean(event))
-  const listingEvents = donationListings.map((listing) => mapDonationListing(listing, foodById))
-
-  return [...foodEvents.filter((event) => event.kind === 'used'), ...listingEvents]
 }
 
 function mapLocalEvent(event: LocalAnalyticsEvent): AnalyticsEvent {
@@ -515,69 +545,9 @@ function mapLocalEvent(event: LocalAnalyticsEvent): AnalyticsEvent {
   }
 }
 
-function mapFoodItem(item: FoodItem): AnalyticsEvent | null {
-  if (item.status !== FoodStatus.USED && item.status !== FoodStatus.DONATED) return null
-
-  const record = item as FoodItem & Record<string, unknown>
-
-  return {
-    id: `food_${item.id}`,
-    kind: item.status === FoodStatus.USED ? 'used' : 'donated',
-    name: item.name,
-    category: getFoodCategory(record),
-    foodType: String(record.type ?? record.foodType ?? 'Food'),
-    quantity: getNumericValue(record.quantity, 1),
-    unit: String(record.unit ?? 'item'),
-    date: parseDate(record.created_at) ?? new Date(),
-    source: 'firebase',
-  }
-}
-
-function mapDonationListing(
-  listing: DonationListing,
-  foodById: Map<string, FoodItem>,
-): AnalyticsEvent {
-  const record = listing as DonationListing & Record<string, unknown>
-  const linkedFood = foodById.get(listing.food_id)
-  const linkedFoodRecord = linkedFood as (FoodItem & Record<string, unknown>) | undefined
-
-  return {
-    id: `listing_${listing.id}`,
-    kind: 'donated',
-    name: listing.title,
-    category: linkedFoodRecord ? getFoodCategory(linkedFoodRecord) : 'donations',
-    foodType: linkedFood ? String(linkedFoodRecord?.type ?? 'Food') : 'Donation',
-    quantity: getNumericValue(record.quantity, 1),
-    unit: 'item',
-    date: parseDate(record.created_at) ?? new Date(),
-    source: 'firebase',
-  }
-}
-
-function getFoodCategory(record: Record<string, unknown>): string {
-  return normalizeCategory(
-    String(
-      record.category_id ??
-        record.categoryId ??
-        record.type ??
-        record.storage_location ??
-        'uncategorized',
-    ),
-  )
-}
-
 function normalizeCategory(category: string): string {
   const normalized = category.trim().toLowerCase().replace(/\s+/g, '-')
   return normalized || 'uncategorized'
-}
-
-function getNumericValue(value: unknown, fallback: number): number {
-  if (typeof value === 'number' && Number.isFinite(value)) return value
-  if (typeof value === 'string') {
-    const parsed = Number(value)
-    if (Number.isFinite(parsed)) return parsed
-  }
-  return fallback
 }
 
 function parseDate(value: unknown): Date | null {
@@ -596,93 +566,14 @@ function parseDate(value: unknown): Date | null {
   return Number.isNaN(date.getTime()) ? null : date
 }
 
-function createSampleEvents(): AnalyticsEvent[] {
-  const eventSeeds: Array<Omit<AnalyticsEvent, 'id' | 'date' | 'source'> & { daysAgo: number }> = [
-    {
-      kind: 'used',
-      name: 'Fresh Spinach',
-      category: 'fridge',
-      foodType: 'Vegetables',
-      quantity: 1,
-      unit: 'item',
-      daysAgo: 1,
-    },
-    {
-      kind: 'donated',
-      name: 'Canned Beans',
-      category: 'pantry',
-      foodType: 'Canned goods',
-      quantity: 2,
-      unit: 'items',
-      daysAgo: 2,
-    },
-    {
-      kind: 'used',
-      name: 'Susu UltraMilk',
-      category: 'fridge',
-      foodType: 'Dairy & Eggs',
-      quantity: 1,
-      unit: 'item',
-      daysAgo: 3,
-    },
-    {
-      kind: 'donated',
-      name: 'Frozen Corn',
-      category: 'freezer',
-      foodType: 'Frozen Foods',
-      quantity: 1,
-      unit: 'item',
-      daysAgo: 4,
-    },
-    {
-      kind: 'used',
-      name: 'Bananas',
-      category: 'counter',
-      foodType: 'Fruits',
-      quantity: 4,
-      unit: 'items',
-      daysAgo: 5,
-    },
-    {
-      kind: 'used',
-      name: 'Rice Bowl Leftovers',
-      category: 'fridge',
-      foodType: 'Meals',
-      quantity: 1,
-      unit: 'item',
-      daysAgo: 8,
-    },
-    {
-      kind: 'donated',
-      name: 'Bread Loaf',
-      category: 'pantry',
-      foodType: 'Bakery & Grains',
-      quantity: 1,
-      unit: 'item',
-      daysAgo: 12,
-    },
-  ]
-
-  return eventSeeds.map((event, index) => {
-    const date = new Date()
-    date.setDate(date.getDate() - event.daysAgo)
-
-    return {
-      id: `sample_${index}`,
-      kind: event.kind,
-      name: event.name,
-      category: event.category,
-      foodType: event.foodType,
-      quantity: event.quantity,
-      unit: event.unit,
-      date,
-      source: 'sample',
-    }
-  })
+function handleAnalyticsUpdate() {
+  void loadAnalyticsData()
 }
 
-function handleStorageUpdate() {
-  void loadAnalyticsData()
+function handleStorageUpdate(event: StorageEvent) {
+  if (event.key === 'pantrypal:analytics-events') {
+    void loadAnalyticsData()
+  }
 }
 
 function drawCharts() {
@@ -1078,6 +969,19 @@ function formatQuantity(value: number, unit: string): string {
   display: flex;
   gap: 10px;
   padding: 12px 16px;
+}
+
+.status-message .spin {
+  animation: analytics-spin 1s linear infinite;
+}
+
+@keyframes analytics-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .stats-grid {

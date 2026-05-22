@@ -159,14 +159,40 @@
                     <!-- Right Column: Recommendations -->
                     <div class="recommendations-section">
                       <div class="section-header">
-                        <div class="section-label">AI RECOMMENDATIONS</div>
-                        <span class="reco-count">{{ recommendations.length }} items</span>
+                        <div class="section-label">RECOMMENDATIONS</div>
+                        <span class="reco-count">
+                          {{ recommendationsLoading ? 'Loading' : `${recommendations.length} items` }}
+                        </span>
                       </div>
 
                       <div class="recommendations-scroll">
-                        <div v-for="rec in recommendations" :key="rec.id" class="premium-reco-card">
+                        <div v-if="recommendationsLoading" class="reco-state">
+                          <i class="bi bi-arrow-repeat spin"></i>
+                          <span>Finding meals from your inventory…</span>
+                        </div>
+                        <div v-else-if="recommendationsError" class="reco-state reco-state-error">
+                          <i class="bi bi-exclamation-circle"></i>
+                          <span>{{ recommendationsError }}</span>
+                        </div>
+                        <div v-else-if="!recommendations.length" class="reco-state">
+                          <i class="bi bi-basket"></i>
+                          <span>
+                            {{
+                              inventoryItems.length
+                                ? 'No matching recipes found. Try names like Chicken, Milk, or Rice.'
+                                : 'Add items to your inventory to get recipe suggestions.'
+                            }}
+                          </span>
+                        </div>
+                        <div v-for="rec in recommendations" v-else :key="rec.id" class="premium-reco-card">
                           <div class="reco-visual">
-                            <span class="reco-emoji">{{ rec.icon }}</span>
+                            <img
+                              v-if="rec.imageUrl"
+                              :src="rec.imageUrl"
+                              :alt="rec.name"
+                              class="reco-thumb"
+                            />
+                            <span v-else class="reco-emoji">{{ rec.icon }}</span>
                           </div>
                           <div class="reco-details">
                             <div class="reco-top">
@@ -329,16 +355,25 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import BaseSidebar from '@/components/BaseSidebar.vue'
 import BaseTopbar from '@/components/BaseTopbar.vue'
 import BaseRightSidebar from '@/components/BaseRightSidebar.vue'
 import type { NavItem } from '@/components/BaseSidebar.vue'
 import { auth } from '@/firebase'
 import { onAuthStateChanged, type User } from 'firebase/auth'
-import { getUserFoodItems } from '@/services/foodService'
-import { saveMealPlan as saveMealToDb, getMealPlan as getMealFromDb } from '@/services/mealService'
+import { getUserFoodItems, type FoodItem } from '@/services/foodService'
+import {
+  getMealPlanByDate,
+  getMealPlanItems,
+  getUserMealPlansWithItems,
+  saveDailyMealPlan,
+  type MealTypeValue,
+} from '@/services/mealPlanService'
+import {
+  fetchMealRecommendations,
+  type MealRecommendation,
+} from '@/services/mealRecommendationService'
 
 // Types
 interface InventoryItem {
@@ -347,21 +382,24 @@ interface InventoryItem {
   name: string
   location: string
   expiry: string
+  expiryDate: Date
   tag?: string
   warning?: boolean
 }
 
-interface Recommendation {
-  id: number
-  icon: string
-  name: string
-  uses: string
-}
+type Recommendation = MealRecommendation
 
 interface MealSlot {
-  type: string
+  type: MealTypeValue
   label: string
   meal: string
+  ingredientIds: string[]
+}
+
+interface SelectedIngredient {
+  id: string
+  icon: string
+  name: string
 }
 
 // Navigation
@@ -375,8 +413,10 @@ const navItems: NavItem[] = [
 ]
 
 // Calendar
-const currentDate = ref(new Date(2026, 3, 14))
-const selectedDate = ref(new Date(2026, 3, 14))
+const initialDate = new Date()
+initialDate.setHours(0, 0, 0, 0)
+const currentDate = ref(new Date(initialDate.getFullYear(), initialDate.getMonth(), 1))
+const selectedDate = ref(new Date(initialDate))
 const dayLabels = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']
 
 const currentMonthYear = computed(() =>
@@ -463,48 +503,88 @@ const nextMonth = () => {
 const selectDate = (date: Date) => {
   selectedDate.value = new Date(date)
   selectedDate.value.setHours(0, 0, 0, 0)
-  loadMealsForDate()
 }
 
 // Meal slots
-const mealSlots = ref<MealSlot[]>([
-  { type: 'breakfast', label: 'Breakfast', meal: '' },
-  { type: 'lunch', label: 'Lunch', meal: '' },
-  { type: 'dinner', label: 'Dinner', meal: '' },
-  { type: 'snacks', label: 'Snacks', meal: '' },
-])
+const createEmptyMealSlots = (): MealSlot[] => [
+  { type: 'breakfast', label: 'Breakfast', meal: '', ingredientIds: [] },
+  { type: 'lunch', label: 'Lunch', meal: '', ingredientIds: [] },
+  { type: 'dinner', label: 'Dinner', meal: '', ingredientIds: [] },
+  { type: 'snack', label: 'Snacks', meal: '', ingredientIds: [] },
+]
+
+const mealSlots = ref<MealSlot[]>(createEmptyMealSlots())
 
 const currentUser = ref<User | null>(null)
 const isLoading = ref(false)
+let unsubscribeAuth: (() => void) | null = null
 
 // Inventory
 const inventoryItems = ref<InventoryItem[]>([])
+
+const getFoodRawField = (item: FoodItem, field: string) =>
+  (item as unknown as Record<string, unknown>)[field]
+
+const getInventoryIcon = (foodType: string, storageType: string) => {
+  const type = foodType.toLowerCase()
+  if (type.includes('vegetable') || type.includes('produce')) return '🥦'
+  if (type.includes('dairy') || type.includes('milk')) return '🥛'
+  if (type.includes('grain') || type.includes('rice')) return '🍚'
+  if (type.includes('bread') || type.includes('bakery')) return '🍞'
+  if (type.includes('egg')) return '🥚'
+  if (storageType === 'fridge') return '🧊'
+  if (storageType === 'freezer') return '❄️'
+  if (storageType === 'pantry') return '📦'
+  return '🍽️'
+}
+
+const formatStorageLocation = (value: unknown, fallbackType: string) => {
+  if (typeof value === 'string' && value.trim()) return value
+  const labels: Record<string, string> = {
+    fridge: 'Fridge',
+    pantry: 'Pantry',
+    freezer: 'Freezer',
+    countertop: 'Countertop',
+  }
+  return labels[fallbackType] ?? 'Storage'
+}
 
 const fetchInventory = async () => {
   if (!currentUser.value) return
   try {
     const items = await getUserFoodItems(currentUser.value.uid)
-    inventoryItems.value = items.map((item) => {
-      // Calculate warning (e.g., if expires in < 3 days)
-      const expiry = new Date(item.expiryDate)
-      const now = new Date()
-      const diffTime = expiry.getTime() - now.getTime()
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+    inventoryItems.value = items
+      .filter((item) => item.status === 'available' || item.status === 'planned')
+      .map((item) => {
+        const rawExpiryDate = getFoodRawField(item, 'expiry_date')
+        const rawFoodType = getFoodRawField(item, 'food_type')
+        const rawStorageLocation = getFoodRawField(item, 'storage_location')
+        const expiryDateString =
+          typeof rawExpiryDate === 'string' ? rawExpiryDate : new Date().toISOString().slice(0, 10)
+        const storageType = item.type || 'fridge'
+        const foodType = typeof rawFoodType === 'string' ? rawFoodType : item.foodType || 'Food'
+        const expiry = new Date(`${expiryDateString}T00:00:00`)
+        const now = new Date()
+        now.setHours(0, 0, 0, 0)
+        const diffTime = expiry.getTime() - now.getTime()
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
 
-      return {
-        id: item.id,
-        icon: item.foodType === 'Vegetables' ? '🥦' : item.foodType === 'Dairy' ? '🥛' : '📦', // Simple icon mapping
-        name: item.name,
-        location: item.storageLocation || 'Unknown',
-        expiry: new Date(item.expiryDate).toLocaleDateString('en-GB', {
-          day: 'numeric',
-          month: 'short',
-          year: 'numeric',
-        }),
-        warning: diffDays <= 3 && diffDays >= 0,
-        tag: diffDays >= 0 ? `${diffDays}d` : 'Expired',
-      }
-    })
+        return {
+          id: item.id,
+          icon: getInventoryIcon(foodType, storageType),
+          name: item.name,
+          location: formatStorageLocation(rawStorageLocation, storageType),
+          expiry: expiry.toLocaleDateString('en-GB', {
+            day: 'numeric',
+            month: 'short',
+            year: 'numeric',
+          }),
+          expiryDate: expiry,
+          warning: diffDays <= 3 && diffDays >= 0,
+          tag: diffDays >= 0 ? `${diffDays}d` : 'Expired',
+        }
+      })
+    await loadRecommendations()
   } catch (error) {
     console.error('Error fetching inventory:', error)
   }
@@ -524,17 +604,20 @@ const loadMealsForDate = async () => {
   isLoading.value = true
 
   try {
-    const saved = await getMealFromDb(currentUser.value.uid, dateKey!)
-    if (saved && saved.slots) {
-      mealSlots.value = saved.slots.map((slot) => ({ ...slot }))
-    } else {
-      mealSlots.value = [
-        { type: 'breakfast', label: 'Breakfast', meal: '' },
-        { type: 'lunch', label: 'Lunch', meal: '' },
-        { type: 'dinner', label: 'Dinner', meal: '' },
-        { type: 'snacks', label: 'Snacks', meal: '' },
-      ]
+    const savedPlan = await getMealPlanByDate(currentUser.value.uid, dateKey)
+    const nextSlots = createEmptyMealSlots()
+
+    if (savedPlan) {
+      const savedItems = await getMealPlanItems(savedPlan.id)
+      savedItems.forEach((item) => {
+        const slot = nextSlots.find((s) => s.type === item.meal_type)
+        if (!slot) return
+        if (!slot.meal && item.recipe_name) slot.meal = item.recipe_name
+        if (!item.food_id.startsWith('manual-')) slot.ingredientIds.push(item.food_id)
+      })
     }
+
+    mealSlots.value = nextSlots
   } catch (error) {
     console.error('Error loading meal plan:', error)
   } finally {
@@ -543,16 +626,26 @@ const loadMealsForDate = async () => {
 }
 
 onMounted(() => {
-  onAuthStateChanged(auth, (user) => {
+  unsubscribeAuth = onAuthStateChanged(auth, (user) => {
     currentUser.value = user
     if (user) {
       fetchInventory()
       loadMealsForDate()
+    } else {
+      inventoryItems.value = []
+      mealSlots.value = createEmptyMealSlots()
     }
   })
 })
 
-watch(selectedDate, loadMealsForDate)
+onUnmounted(() => {
+  unsubscribeAuth?.()
+})
+
+watch(selectedDate, () => {
+  loadMealsForDate()
+  loadRecommendations()
+})
 
 // Inventory
 
@@ -560,8 +653,8 @@ watch(selectedDate, loadMealsForDate)
 
 // Create meal form
 const newMealName = ref('')
-const selectedIngredients = ref<{ icon: string; name: string }[]>([])
-const selectedMealSlotForNewMeal = ref('breakfast')
+const selectedIngredients = ref<SelectedIngredient[]>([])
+const selectedMealSlotForNewMeal = ref<MealTypeValue>('breakfast')
 const showIngredientSelector = ref(false)
 const ingredientSearch = ref('')
 const tempSelectedIngredients = ref<Set<string>>(new Set())
@@ -569,7 +662,10 @@ const tempSelectedIngredients = ref<Set<string>>(new Set())
 const filteredInventoryForModal = computed(() => {
   if (!ingredientSearch.value) return inventoryItems.value
   const q = ingredientSearch.value.toLowerCase()
-  return inventoryItems.value.filter((item) => item.name.toLowerCase().includes(q))
+  return inventoryItems.value.filter(
+    (item) =>
+      item.name.toLowerCase().includes(q) || item.location.toLowerCase().includes(q),
+  )
 })
 
 const openIngredientSelector = () => {
@@ -597,15 +693,17 @@ const toggleIngredientSelection = (item: InventoryItem) => {
 const isIngredientSelected = (item: InventoryItem) => tempSelectedIngredients.value.has(item.id)
 
 const confirmIngredientSelection = () => {
-  selectedIngredients.value = Array.from(tempSelectedIngredients.value).map((id) => {
-    const item = inventoryItems.value.find((i) => i.id === id)!
-    return { icon: item.icon, name: item.name }
-  })
+  selectedIngredients.value = Array.from(tempSelectedIngredients.value)
+    .map((id) => inventoryItems.value.find((i) => i.id === id))
+    .filter((item): item is InventoryItem => Boolean(item))
+    .map((item) => ({ id: item.id, icon: item.icon, name: item.name }))
   closeIngredientSelector()
+  loadRecommendations()
 }
 
 const removeIngredient = (index: number) => {
   selectedIngredients.value.splice(index, 1)
+  loadRecommendations()
 }
 
 const addMealToPlan = () => {
@@ -616,24 +714,86 @@ const addMealToPlan = () => {
   const slotType = selectedMealSlotForNewMeal.value
   const slot = mealSlots.value.find((s) => s.type === slotType)
   if (slot) {
-    slot.meal = newMealName.value
+    slot.meal = newMealName.value.trim()
+    slot.ingredientIds = selectedIngredients.value.map((item) => item.id)
     newMealName.value = ''
-    // Optional: also store ingredients? Not needed for prototype
+    selectedIngredients.value = []
+    closeCreateMealPanel()
   }
 }
 
-// Recommendations
-const recommendations = ref<Recommendation[]>([
+// Recommendations (TheMealDB when available, hardcoded fallbacks otherwise)
+const fallbackRecommendations: Recommendation[] = [
   { id: 1, icon: '🍛', name: 'Nasi Goreng', uses: 'Rice, Eggs, Chicken' },
   { id: 2, icon: '🍜', name: 'Mie Goreng', uses: 'Noodles, Eggs, Veggies' },
   { id: 3, icon: '🥞', name: 'Milk Pancakes', uses: 'UltraMilk, Eggs, Flour' },
-])
+]
+
+const recommendations = ref<Recommendation[]>([...fallbackRecommendations])
+const recommendationsLoading = ref(false)
+const recommendationsError = ref<string | null>(null)
+
+const getRecommendationIngredientIds = (rec: Recommendation) => {
+  const matchTerms = [
+    ...(rec.matchedIngredients ?? []),
+    ...rec.uses.split(',').map((ingredient) => ingredient.trim()),
+  ]
+    .map((term) => term.toLowerCase())
+    .filter(Boolean)
+
+  return inventoryItems.value
+    .filter((item) => {
+      const itemName = item.name.toLowerCase()
+      return matchTerms.some(
+        (term) =>
+          itemName.includes(term) ||
+          term.includes(itemName.split(/[·,(]/)[0]!.trim().toLowerCase()),
+      )
+    })
+    .map((item) => item.id)
+}
+
+const loadRecommendations = async () => {
+  recommendationsLoading.value = true
+  recommendationsError.value = null
+  try {
+    const apiRecommendations = await fetchMealRecommendations({
+      date: getDateKey(selectedDate.value),
+      inventory: inventoryItems.value.map((item) => ({
+        id: item.id,
+        name: item.name,
+        location: item.location,
+        expiry: item.expiry,
+        warning: item.warning,
+      })),
+      selectedIngredients: selectedIngredients.value.map((item) => item.name),
+    })
+
+    if (apiRecommendations?.length) {
+      recommendations.value = apiRecommendations
+    } else {
+      recommendations.value = [...fallbackRecommendations]
+    }
+  } catch (error) {
+    console.error('Error loading meal recommendations:', error)
+    recommendations.value = [...fallbackRecommendations]
+    recommendationsError.value = null
+  } finally {
+    recommendationsLoading.value = false
+  }
+}
+
+const refreshRecommendationsForAction = async () => {
+  await loadRecommendations()
+  return recommendations.value.length > 0
+}
 
 const planRecommendation = (rec: Recommendation) => {
   // Find first empty slot
   const emptySlot = mealSlots.value.find((s) => !s.meal)
   if (emptySlot) {
     emptySlot.meal = rec.name
+    emptySlot.ingredientIds = getRecommendationIngredientIds(rec)
     alert(`"${rec.name}" added to ${emptySlot.label}`)
   } else {
     alert('All slots are filled. Edit one to replace it.')
@@ -667,6 +827,7 @@ const saveMealEdit = () => {
   const slot = mealSlots.value.find((s) => s.type === editingMealSlot.value)
   if (slot) {
     slot.meal = editingMealName.value.trim() || ''
+    if (!slot.meal) slot.ingredientIds = []
   }
   closeMealEdit()
 }
@@ -682,7 +843,16 @@ const saveMealPlan = async () => {
   isLoading.value = true
 
   try {
-    await saveMealToDb(currentUser.value.uid, dateKey!, mealSlots.value, selectedIngredients.value)
+    await saveDailyMealPlan(
+      currentUser.value.uid,
+      dateKey,
+      mealSlots.value.map((slot) => ({
+        mealType: slot.type,
+        recipeName: slot.meal,
+        foodIds: slot.ingredientIds,
+        reservedQuantity: 1,
+      })),
+    )
     alert(`Meal plan for ${formattedSelectedDate.value} saved!`)
   } catch (error) {
     console.error('Error saving meal plan:', error)
@@ -692,15 +862,149 @@ const saveMealPlan = async () => {
   }
 }
 
-// Right sidebar actions
-const planWeekNavigate = () => alert('Week planning mode (prototype)')
-const shoppingListNavigate = () => alert('Shopping list generated (prototype)')
-const favoriteMealsNavigate = () => alert('Favorite meals view (prototype)')
+const getWeekStart = (date: Date) => {
+  const start = new Date(date)
+  start.setHours(0, 0, 0, 0)
+  start.setDate(start.getDate() - start.getDay())
+  return start
+}
+
+const planWeekNavigate = async () => {
+  if (!currentUser.value) {
+    alert('Please log in to plan your week.')
+    return
+  }
+
+  const hasRecommendations = await refreshRecommendationsForAction()
+  if (!hasRecommendations) {
+    alert('No meal recommendations are available yet. Add inventory items and try again.')
+    return
+  }
+
+  const ok = window.confirm(
+    'Generate a simple 7-day meal plan from TheMealDB recommendations? This will replace meal plans for this week.',
+  )
+  if (!ok) return
+
+  const weekStart = getWeekStart(selectedDate.value)
+  isLoading.value = true
+
+  try {
+    await Promise.all(
+      Array.from({ length: 7 }, (_, dayOffset) => {
+        const date = new Date(weekStart)
+        date.setDate(weekStart.getDate() + dayOffset)
+        const dateKey = getDateKey(date)
+        const slots = createEmptyMealSlots().map((slot, slotIndex) => {
+          const rec =
+            recommendations.value[
+              (dayOffset * 4 + slotIndex) % recommendations.value.length
+            ]!
+          return {
+            mealType: slot.type,
+            recipeName: rec.name,
+            foodIds: getRecommendationIngredientIds(rec),
+            reservedQuantity: 1,
+          }
+        })
+
+        return saveDailyMealPlan(currentUser.value!.uid, dateKey, slots)
+      }),
+    )
+
+    currentDate.value = new Date(weekStart.getFullYear(), weekStart.getMonth(), 1)
+    selectedDate.value = new Date(weekStart)
+    await loadMealsForDate()
+    alert('Weekly meal plan generated.')
+  } catch (error) {
+    console.error('Error generating weekly meal plan:', error)
+    alert('Failed to generate weekly meal plan. Please try again.')
+  } finally {
+    isLoading.value = false
+  }
+}
+
+const shoppingListNavigate = async () => {
+  await refreshRecommendationsForAction()
+
+  const plannedMealNames = mealSlots.value
+    .map((slot) => slot.meal.trim())
+    .filter((mealName) => mealName.length > 0)
+
+  if (!plannedMealNames.length) {
+    alert('Plan at least one meal first, then I can generate a shopping list.')
+    return
+  }
+
+  const inventoryNames = inventoryItems.value.map((item) => item.name.toLowerCase())
+  const missingIngredients = new Set<string>()
+
+  plannedMealNames.forEach((mealName) => {
+    const recommendation = recommendations.value.find(
+      (rec) => rec.name.toLowerCase() === mealName.toLowerCase(),
+    )
+    if (!recommendation) return
+
+    recommendation.uses.split(',').forEach((ingredient) => {
+      const normalizedIngredient = ingredient.trim()
+      if (!normalizedIngredient) return
+      const hasIngredient = inventoryNames.some((name) =>
+        name.includes(normalizedIngredient.toLowerCase()),
+      )
+      if (!hasIngredient) missingIngredients.add(normalizedIngredient)
+    })
+  })
+
+  if (!missingIngredients.size) {
+    alert('Shopping list is clear. Your inventory covers the planned recommendation meals.')
+    return
+  }
+
+  alert(`Shopping List:\n- ${Array.from(missingIngredients).join('\n- ')}`)
+}
+
+const favoriteMealsNavigate = async () => {
+  if (!currentUser.value) {
+    alert('Please log in to view favorite meals.')
+    return
+  }
+
+  try {
+    const plans = await getUserMealPlansWithItems(currentUser.value.uid)
+    const mealCounts = new Map<string, number>()
+
+    plans.forEach((plan) => {
+      plan.items.forEach((item) => {
+        if (!item.recipe_name) return
+        mealCounts.set(item.recipe_name, (mealCounts.get(item.recipe_name) ?? 0) + 1)
+      })
+    })
+
+    const favoriteMeals = Array.from(mealCounts.entries())
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .slice(0, 5)
+
+    if (!favoriteMeals.length) {
+      alert('No favorite meals yet. Save a few meal plans first.')
+      return
+    }
+
+    alert(
+      `Favorite Meals:\n${favoriteMeals
+        .map(([meal, count], index) => `${index + 1}. ${meal} (${count} planned)`)
+        .join('\n')}`,
+    )
+  } catch (error) {
+    console.error('Error loading favorite meals:', error)
+    alert('Failed to load favorite meals. Please try again.')
+  }
+}
 
 const showCreateMealPanel = ref(false)
 
 const openCreateMealPanel = () => {
   showCreateMealPanel.value = true
+  loadRecommendations()
 }
 
 const closeCreateMealPanel = () => {
@@ -904,11 +1208,17 @@ const mealSearch = ref('')
   gap: 8px;
   margin-bottom: 16px;
 }
-.inv-search-row input {
+
+.inv-search-row .input-wrapper {
   flex: 1;
-  padding: 8px 12px;
+  width: 100%;
+}
+
+.inv-search-row .premium-input {
+  min-height: 46px;
+  padding: 12px 14px 12px 42px;
   border: 1px solid #e2e8f0;
-  border-radius: 40px;
+  border-radius: 16px;
   background: #f8fafc;
 }
 .filter-btn-sm {
@@ -1476,6 +1786,8 @@ hr {
   padding: 32px;
   display: flex;
   flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .section-header {
@@ -1496,6 +1808,8 @@ hr {
 
 .recommendations-scroll {
   flex: 1;
+  min-height: 0;
+  max-height: 350px;
   overflow-y: auto;
   padding-right: 8px;
 }
@@ -1528,6 +1842,48 @@ hr {
   justify-content: center;
   font-size: 1.8rem;
   flex-shrink: 0;
+  overflow: hidden;
+}
+
+.reco-thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.reco-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 32px 16px;
+  text-align: center;
+  color: #64748b;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.reco-state i {
+  font-size: 1.5rem;
+  color: #94a3b8;
+}
+
+.reco-state-error i {
+  color: #ef4444;
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .reco-details {

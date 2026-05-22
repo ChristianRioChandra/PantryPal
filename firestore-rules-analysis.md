@@ -274,7 +274,7 @@ return request.auth != null;
           'created_at'
         ]) &&
         data.user_id is string &&
-        isOwner(data.user_id) &&
+        (isOwner(data.user_id) || (signedIn() && data.type in ['DONATION_CLAIMED', 'DONATION_CONFIRMED'])) &&
         isValidNotificationType(data.type) &&
         isNonEmptyString(data.message, 300) &&
         data.is_read is bool &&
@@ -447,11 +447,19 @@ return request.auth != null;
       allow read: if canReadListing();
 
       allow update: if signedIn() &&
-        isOwner(resource.data.user_id) &&
-        isValidListingDoc(request.resource.data) &&
-        request.resource.data.user_id == resource.data.user_id &&
-        request.resource.data.food_id == resource.data.food_id &&
-        request.resource.data.created_at == resource.data.created_at;
+        (
+          (
+            isOwner(resource.data.user_id) &&
+            isValidListingDoc(request.resource.data) &&
+            request.resource.data.user_id == resource.data.user_id &&
+            request.resource.data.food_id == resource.data.food_id &&
+            request.resource.data.created_at == resource.data.created_at
+          ) ||
+          (
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']) &&
+            request.resource.data.status == 'claimed'
+          )
+        );
 
       allow delete: if false;
     }

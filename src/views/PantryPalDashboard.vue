@@ -157,7 +157,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { db } from '@/firebase'
 import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore'
-import { getMealPlan, type MealPlan } from '@/services/mealService'
+import { getMealPlanByDate, getMealPlanItems } from '@/services/mealPlanService'
 import BaseSidebar from '@/components/BaseSidebar.vue'
 import BaseTopbar from '@/components/BaseTopbar.vue'
 import BaseRightSidebar from '@/components/BaseRightSidebar.vue'
@@ -240,7 +240,13 @@ const expiringSoonCount = computed(() => {
 
 // ─── Meal Plan (Dashboard) ────────────────────────────────────────────────────
 const dashboardDate = ref(new Date())
-const dashboardMealPlan = ref<MealPlan | null>(null)
+
+interface DashboardMealSlot {
+  type: string
+  meal: string
+}
+
+const dashboardMealPlan = ref<{ slots: DashboardMealSlot[] } | null>(null)
 
 const dashboardMealSlots = [
   { type: 'breakfast', label: 'Breakfast' },
@@ -262,7 +268,22 @@ const fetchDashboardMealPlan = async () => {
 
   const dateStr = dashboardDate.value.toISOString().split('T')[0]!
   try {
-    dashboardMealPlan.value = await getMealPlan(user.uid!, dateStr)
+    const plan = await getMealPlanByDate(user.uid, dateStr)
+    if (!plan) {
+      dashboardMealPlan.value = null
+      return
+    }
+
+    const items = await getMealPlanItems(plan.id)
+    const slots = dashboardMealSlots.map((slot) => {
+      const item = items.find((mealItem) => mealItem.meal_type === slot.type)
+      return {
+        type: slot.type,
+        meal: item?.recipe_name ?? '',
+      }
+    })
+
+    dashboardMealPlan.value = { slots }
   } catch (err) {
     console.error('Error fetching dashboard meal plan:', err)
   }

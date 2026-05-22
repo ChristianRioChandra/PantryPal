@@ -87,6 +87,20 @@ service cloud.firestore {
     // Fields:
     //   - name: string (required, 1..60)
     //
+    // Collection: food_actions
+    // Fields:
+    //   - user_id: string (required, immutable, owner uid)
+    //   - food_id: string (required, immutable)
+    //   - kind: string (required enum: finished|wasted)
+    //   - name: string (required, 1..80)
+    //   - category: string (required, 1..80)
+    //   - food_type: string (required, 1..40)
+    //   - quantity: number (required, > 0)
+    //   - unit: string (required, 1..20)
+    //   - expiry_date: string (required, YYYY-MM-DD)
+    //   - was_expired: bool (required)
+    //   - actioned_at: timestamp (required, immutable)
+    //
     // ===============================================================
     // Helper Functions
     // ===============================================================
@@ -150,6 +164,39 @@ service cloud.firestore {
 
     function isValidRequestStatus(value) {
       return value in ['pending', 'confirmed', 'rejected'];
+    }
+
+    function isValidFoodActionKind(value) {
+      return value in ['finished', 'wasted'];
+    }
+
+    function isValidFoodActionDoc(data, userId) {
+      return data.keys().hasOnly([
+          'user_id',
+          'food_id',
+          'kind',
+          'name',
+          'category',
+          'food_type',
+          'quantity',
+          'unit',
+          'expiry_date',
+          'was_expired',
+          'actioned_at',
+        ]) &&
+        data.user_id == userId &&
+        isNonEmptyString(data.food_id, 120) &&
+        isValidFoodActionKind(data.kind) &&
+        isNonEmptyString(data.name, 80) &&
+        isNonEmptyString(data.category, 80) &&
+        isNonEmptyString(data.food_type, 40) &&
+        data.quantity is number &&
+        data.quantity > 0 &&
+        data.quantity <= 1000000 &&
+        isNonEmptyString(data.unit, 20) &&
+        isIsoDate(data.expiry_date) &&
+        data.was_expired is bool &&
+        data.actioned_at is timestamp;
     }
 
     function validPrivacySettings(data) {
@@ -277,7 +324,7 @@ service cloud.firestore {
           'email_sent'
         ]) &&
         data.user_id is string &&
-        isOwner(data.user_id) &&
+        (isOwner(data.user_id) || (signedIn() && data.type in ['DONATION_CLAIMED', 'DONATION_CONFIRMED'])) &&
         isValidNotificationType(data.type) &&
         isNonEmptyString(data.message, 300) &&
         data.is_read is bool &&
@@ -298,7 +345,8 @@ service cloud.firestore {
           'availability_start',
           'availability_end',
           'status',
-          'created_at'
+          'created_at',
+          'claimed_by_uids'
         ]) &&
         data.user_id is string &&
         isOwner(data.user_id) &&
@@ -313,7 +361,8 @@ service cloud.firestore {
         isNonEmptyString(data.availability_start, 40) &&
         isNonEmptyString(data.availability_end, 40) &&
         isValidListingStatus(data.status) &&
-        data.created_at is timestamp;
+        data.created_at is timestamp &&
+        (data.get('claimed_by_uids', null) == null || (data.claimed_by_uids is list && data.claimed_by_uids.size() <= 100));
     }
 
     function isValidRequestDoc(data) {
@@ -354,8 +403,22 @@ service cloud.firestore {
       return signedIn() &&
         (
           resource.data.status == 'active' ||
-          isOwner(resource.data.user_id)
+          resource.data.status == 'claimed' ||
+          isOwner(resource.data.user_id) ||
+          // Allow reading if user has claimed this listing (even if completed/cancelled)
+          (resource.data.get('claimed_by_uids', null) != null && request.auth.uid in resource.data.claimed_by_uids)
         );
+    }
+
+    function isValidClaimListingUpdate() {
+      return signedIn() &&
+        resource.data.status == 'active' &&
+        resource.data.user_id != request.auth.uid &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'claimed_by_uids']) &&
+        request.resource.data.status == 'claimed' &&
+        request.resource.data.claimed_by_uids is list &&
+        request.auth.uid in request.resource.data.claimed_by_uids &&
+        request.resource.data.claimed_by_uids.size() <= 100;
     }
 
     // ===============================================================
@@ -394,6 +457,15 @@ service cloud.firestore {
         request.resource.data.created_at == resource.data.created_at;
 
       allow delete: if signedIn() && isOwner(resource.data.user_id);
+    }
+
+    match /food_actions/{actionId} {
+      allow create: if signedIn() &&
+        isValidFoodActionDoc(request.resource.data, request.auth.uid);
+
+      allow read: if signedIn() && isOwner(resource.data.user_id);
+
+      allow update, delete: if false;
     }
 
     match /mealPlans/{mealPlanId} {
@@ -451,11 +523,16 @@ service cloud.firestore {
       allow read: if canReadListing();
 
       allow update: if signedIn() &&
-        isOwner(resource.data.user_id) &&
-        isValidListingDoc(request.resource.data) &&
-        request.resource.data.user_id == resource.data.user_id &&
-        request.resource.data.food_id == resource.data.food_id &&
-        request.resource.data.created_at == resource.data.created_at;
+        (
+          (
+            isOwner(resource.data.user_id) &&
+            isValidListingDoc(request.resource.data) &&
+            request.resource.data.user_id == resource.data.user_id &&
+            request.resource.data.food_id == resource.data.food_id &&
+            request.resource.data.created_at == resource.data.created_at
+          ) ||
+          isValidClaimListingUpdate()
+        );
 
       allow delete: if false;
     }

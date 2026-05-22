@@ -240,6 +240,14 @@ const handleNotifClick = async (notif: any) => {
     console.warn('Failed to mark notification as read:', err)
   }
 
+  // If the notification has a related entity (e.g., donation listing), navigate to it
+  const relatedId = (notif as any).related_entity_id || (notif as any).relatedEntityId
+  if (relatedId) {
+    // Assuming a route that can display a donation listing, using query param
+    router.push({ path: '/donations', query: { listing: relatedId } })
+    return
+  }
+
   const typeStr = (notif.type || '').toUpperCase()
   const msgStr = (notif.title || notif.message || notif.detail || '').toUpperCase()
 
