@@ -77,10 +77,13 @@
       >
         <div class="modal-box confirmation-modal">
           <h2>{{ confirmationConfig.title }}</h2>
-          <p class="confirmation-copy">
+          <p class="confirmation-copy" v-if="!isBulkDeleteAction">
             {{ confirmationConfig.message }}
             <strong>{{ confirmationItemName }}</strong
             >?
+          </p>
+          <p class="confirmation-copy" v-else>
+            {{ confirmationConfig.message }}
           </p>
 
           <div class="modal-actions">
@@ -927,6 +930,16 @@
           </button>
         </div>
         <div class="right-box">
+          <button
+            class="delete-bulk-btn"
+            id="deleteBulkBtn"
+            :disabled="selectedDonationIds.size === 0"
+            @click="openBulkDeleteModal"
+          >
+            <i class="bi bi-trash"></i> Delete Selected
+          </button>
+        </div>
+        <div class="right-box">
           <button class="right-btn"><i class="bi bi-lightning"></i> Meal Plan</button>
         </div>
         <div class="floating-add" id="addRight" @click="openAddModal">+</div>
@@ -951,6 +964,9 @@
         </button>
         <button class="bulk-action-btn donate-btn" @click="bulkDonateAction" title="Donate selected items">
           <i class="bi bi-gift"></i> Donate
+        </button>
+        <button class="bulk-action-btn delete-btn" @click="openBulkDeleteModal" title="Delete selected items">
+          <i class="bi bi-trash"></i> Delete
         </button>
       </div>
     </div>
@@ -1210,9 +1226,18 @@ const useModalOpen = ref(false)
 const confirmationModalOpen = ref(false)
 const currentUseItemId = ref<string | null>(null)
 const confirmationItemId = ref<string | null>(null)
-const confirmationAction = ref<'delete' | 'finish' | null>(null)
+const confirmationAction = ref<'delete' | 'finish' | 'bulk-delete' | null>(null)
 const selectedUseQuantity = ref('high')
 const selectedStorage = ref('fridge')
+const isBulkDeleteAction = ref(false)
+
+// Undo deletion state
+interface UndoData {
+  items: FoodItem[]
+  itemIds: string[]
+}
+const pendingUndoData = ref<UndoData | null>(null)
+let undoTimeoutId: number | undefined
 
 const donateModalOpen = ref(false)
 const isBulkDonation = ref(false)
@@ -1237,6 +1262,7 @@ const newItem = ref({
 })
 
 const confirmationItemName = computed(() => {
+  if (isBulkDeleteAction.value) return ''
   if (!confirmationItemId.value) return 'this item'
   return inventory.value.find((item) => item.id === confirmationItemId.value)?.name || 'this item'
 })
@@ -1247,6 +1273,14 @@ const confirmationConfig = computed(() => {
       title: 'Finish Food Item',
       message: 'Are you sure you want to mark',
       confirmLabel: 'Finish Item',
+    }
+  }
+
+  if (confirmationAction.value === 'bulk-delete') {
+    return {
+      title: 'Delete Selected Items',
+      message: `Are you sure you want to permanently delete ${selectedDonationIds.value.size} item${selectedDonationIds.value.size !== 1 ? 's' : ''}?`,
+      confirmLabel: 'Delete All',
     }
   }
 
@@ -1528,9 +1562,11 @@ function requestDeleteItem(id: string) {
 
 async function deleteItem(id: string) {
   const item = inventory.value.find((i) => i.id === id)
+  if (!item) return
+
   try {
     // Log as wasted if the item is already expired
-    if (item && item.isExpired && currentUid.value) {
+    if (item.isExpired && currentUid.value) {
       await logFoodAction(currentUid.value, {
         food_id: id,
         kind: FoodActionKind.WASTED,
@@ -1543,12 +1579,29 @@ async function deleteItem(id: string) {
         was_expired: true,
       }).catch((err) => console.error('Failed to log wasted action:', err))
     }
+
+    // Store the raw Firestore data before deletion for undo
+    const rawData = { id, ...item } as unknown as FoodItem
+    pendingUndoData.value = {
+      items: [rawData],
+      itemIds: [id],
+    }
+
     await deleteFoodItem(id)
     selectedDonationIds.value.delete(id)
-    notifyMessage('Item removed.')
+
+    // Show undo notification
+    notifyMessageWithUndo(`Deleted "${item.name}"`, () => performUndo())
+
+    // Clear undo data after 5 seconds
+    if (undoTimeoutId) window.clearTimeout(undoTimeoutId)
+    undoTimeoutId = window.setTimeout(() => {
+      pendingUndoData.value = null
+    }, 5000)
   } catch (error) {
     console.error('Failed to delete item:', error)
     notifyMessage('Failed to remove item.')
+    pendingUndoData.value = null
   }
 }
 
@@ -1623,12 +1676,21 @@ async function confirmPendingAction() {
   const itemId = confirmationItemId.value
   const action = confirmationAction.value
 
-  if (!itemId || !action) {
+  if (!action) {
     closeConfirmationModal()
     return
   }
 
   closeConfirmationModal()
+
+  if (action === 'bulk-delete') {
+    await bulkDeleteItems()
+    return
+  }
+
+  if (!itemId) {
+    return
+  }
 
   if (action === 'delete') {
     await deleteItem(itemId)
@@ -1739,13 +1801,13 @@ async function submitDonation() {
 
       recordInventoryAnalytics(item, 'donated')
       selectedDonationIds.value.delete(item.id)
-      
+
       // Save last used location for convenience
       localStorage.setItem('last_pickup_location', donateForm.value.pickupLocation)
 
       notifyMessage(`"${donateForm.value.title}" published for donation! Thank you! 🤝`)
     }
-    
+
     closeDonateModal()
   } catch (error) {
     console.error('Failed to submit donation:', error)
@@ -1778,6 +1840,72 @@ async function singleDonate(id: string) {
 async function bulkDonateAction() {
   if (selectedDonationIds.value.size === 0) return
   openBulkDonateModal()
+}
+
+function openBulkDeleteModal() {
+  if (selectedDonationIds.value.size === 0) return
+  isBulkDeleteAction.value = true
+  openConfirmationModal('bulk-delete', '')
+}
+
+async function bulkDeleteItems() {
+  const ids = Array.from(selectedDonationIds.value)
+  const selectedItems = ids
+    .map((id) => inventory.value.find((i) => i.id === id))
+    .filter((item): item is InventoryItem => Boolean(item))
+
+  try {
+    // Log expired items as wasted, others just delete
+    if (currentUid.value) {
+      await Promise.all(
+        selectedItems.map((item) =>
+          item.isExpired
+            ? logFoodAction(currentUid.value!, {
+                food_id: item.id,
+                kind: FoodActionKind.WASTED,
+                name: item.name,
+                category: item.category,
+                food_type: item.foodType,
+                quantity: getVolumeQuantity(item.volume),
+                unit: getVolumeUnit(item.volume),
+                expiry_date: item.expiryDate,
+                was_expired: true,
+              }).catch((err) => console.error('Failed to log wasted action:', err))
+            : Promise.resolve()
+        )
+      )
+    }
+
+    // Store the raw Firestore data before deletion for undo
+    const rawItems = selectedItems.map((item) => ({ id: item.id, ...item } as unknown as FoodItem))
+    pendingUndoData.value = {
+      items: rawItems,
+      itemIds: selectedItems.map((item) => item.id),
+    }
+
+    // Delete all items
+    await Promise.all(selectedItems.map((item) => deleteFoodItem(item.id)))
+
+    selectedDonationIds.value.clear()
+    isBulkDeleteAction.value = false
+
+    // Show undo notification
+    notifyMessageWithUndo(
+      `Deleted ${selectedItems.length} item${selectedItems.length !== 1 ? 's' : ''} from inventory.`,
+      () => performUndo()
+    )
+
+    // Clear undo data after 5 seconds
+    if (undoTimeoutId) window.clearTimeout(undoTimeoutId)
+    undoTimeoutId = window.setTimeout(() => {
+      pendingUndoData.value = null
+    }, 5000)
+  } catch (error) {
+    console.error('Failed to bulk delete items:', error)
+    isBulkDeleteAction.value = false
+    notifyMessage('Failed to delete items. Please try again.')
+    pendingUndoData.value = null
+  }
 }
 
 function getFilterLabel(filter: string): string {
@@ -2081,6 +2209,104 @@ function notifyMessage(msg: string) {
     toast.style.opacity = '0'
     setTimeout(() => toast.remove(), 400)
   }, 2400)
+}
+
+function notifyMessageWithUndo(msg: string, undoCallback: () => void) {
+  const toast = document.createElement('div')
+  toast.innerHTML = `
+    <div style="display: flex; align-items: center; gap: 12px; justify-content: space-between;">
+      <span>${msg}</span>
+      <button id="undoBtn" style="
+        background: #2c7a4d;
+        color: white;
+        border: none;
+        padding: 6px 16px;
+        border-radius: 40px;
+        font-weight: 600;
+        font-size: 0.8rem;
+        cursor: pointer;
+        white-space: nowrap;
+        transition: background 0.2s;
+      ">Undo</button>
+    </div>
+  `
+  Object.assign(toast.style, {
+    position: 'fixed',
+    bottom: '20px',
+    left: '50%',
+    transform: 'translateX(-50%)',
+    backgroundColor: '#1f2f3e',
+    color: '#fff',
+    padding: '12px 20px',
+    borderRadius: '60px',
+    fontSize: '0.85rem',
+    zIndex: '10000',
+    fontWeight: '500',
+    maxWidth: '90vw',
+    display: 'flex',
+    alignItems: 'center',
+  })
+
+  const undoBtn = toast.querySelector('#undoBtn') as HTMLButtonElement
+  if (undoBtn) {
+    undoBtn.addEventListener('mouseenter', () => {
+      undoBtn.style.background = '#1f5a38'
+    })
+    undoBtn.addEventListener('mouseleave', () => {
+      undoBtn.style.background = '#2c7a4d'
+    })
+    undoBtn.addEventListener('click', () => {
+      undoCallback()
+      toast.style.opacity = '0'
+      setTimeout(() => toast.remove(), 400)
+    })
+  }
+
+  document.body.appendChild(toast)
+  setTimeout(() => {
+    if (toast.parentElement) {
+      toast.style.opacity = '0'
+      setTimeout(() => toast.remove(), 400)
+    }
+  }, 5000)
+}
+
+async function performUndo() {
+  if (!pendingUndoData.value || !currentUid.value) {
+    notifyMessage('Undo failed: data not found')
+    return
+  }
+
+  try {
+    // Re-add the deleted items back to Firestore
+    const { items } = pendingUndoData.value
+
+    await Promise.all(
+      items.map((item) => {
+        // item is InventoryItem-like; build addFoodItem payload
+        const { quantity, unit } = parseVolumeInput(item.volume || '')
+        const payload = {
+          name: item.name,
+          quantity,
+          unit,
+          expiryDate: item.expiryDate || new Date().toISOString().slice(0, 10),
+          foodType: item.foodType || 'Other',
+          type: (item.category as 'fridge' | 'pantry' | 'freezer' | 'countertop') || 'fridge',
+          storageLocation: item.location || (item.category ? (item.category[0].toUpperCase() + item.category.slice(1)) : 'Storage'),
+          notes: item.description || null,
+        }
+
+        return addFoodItem(currentUid.value!, payload)
+      }),
+    )
+
+    pendingUndoData.value = null
+    if (undoTimeoutId) window.clearTimeout(undoTimeoutId)
+    notifyMessage(`Restored ${items.length} item${items.length !== 1 ? 's' : ''}!`)
+  } catch (error) {
+    console.error('Failed to undo deletion:', error)
+    notifyMessage('Failed to restore items. Please try again.')
+  }
 }
 
 // Watch searchQuery for reactivity (already covered by computed getters)
@@ -2598,6 +2824,32 @@ hr {
 }
 .donate-bulk-btn:disabled {
   background: #b9d2c4;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.delete-bulk-btn {
+  background: #fee2e2;
+  color: #b91c1c;
+  border: none;
+  width: 100%;
+  justify-content: center;
+  padding: 14px 24px;
+  border-radius: 40px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+.delete-bulk-btn:hover:not(:disabled) {
+  background: #fecaca;
+}
+
+.delete-bulk-btn:disabled {
+  background: #f5ddd9;
   cursor: not-allowed;
   opacity: 0.6;
 }
@@ -3832,55 +4084,61 @@ footer {
 /* Mobile Bulk Action Bar */
 .mobile-bulk-action-bar {
   position: fixed;
-  left: 12px;
-  right: 12px;
+  left: 8px;
+  right: 8px;
   bottom: 78px;
   z-index: 39;
   background: white;
   border: 1px solid #e3ebdf;
-  border-radius: 20px;
-  padding: 12px 14px;
+  border-radius: 18px;
+  padding: 10px 10px;
   box-shadow: 0 12px 32px rgba(31, 47, 62, 0.1);
-  display: none;
-  gap: 12px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .mobile-bulk-controls {
   display: flex;
   align-items: center;
-  gap: 8px;
-  flex: 1;
+  gap: 6px;
+  flex: 0 1 auto;
   min-width: 0;
 }
 
 .bulk-selection-count {
   background: #eef7f1;
   color: #2c7a4d;
-  font-size: 0.82rem;
+  font-size: 0.75rem;
   font-weight: 600;
-  padding: 8px 12px;
-  border-radius: 18px;
+  padding: 6px 10px;
+  border-radius: 16px;
   white-space: nowrap;
 }
 
 .mobile-bulk-actions {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   align-items: center;
+  flex: 1;
+  min-width: 0;
 }
 
 .bulk-action-btn {
   border: none;
-  border-radius: 16px;
-  padding: 10px 12px;
-  font-size: 0.82rem;
+  border-radius: 14px;
+  padding: 8px 10px;
+  font-size: 0.75rem;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s;
   display: flex;
   align-items: center;
-  gap: 6px;
+  justify-content: center;
+  gap: 4px;
   white-space: nowrap;
+  flex: 1;
+  min-width: 0;
 }
 
 .bulk-action-btn i {
@@ -3900,9 +4158,10 @@ footer {
 .bulk-action-btn.clear-btn {
   background: #f2f5f0;
   color: #6b7e93;
-  padding: 10px;
+  padding: 8px 8px;
   font-size: 0.9rem;
   min-width: auto;
+  flex: 0 0 auto;
 }
 
 .bulk-action-btn.clear-btn:active {
@@ -3919,6 +4178,19 @@ footer {
 
 .bulk-action-btn.donate-btn:active {
   background: #1f5a38;
+  transform: scale(0.98);
+}
+
+.bulk-action-btn.delete-btn {
+  background: #fee2e2;
+  color: #b91c1c;
+  flex-grow: 1;
+  justify-content: center;
+  min-width: 0;
+}
+
+.bulk-action-btn.delete-btn:active {
+  background: #fecaca;
   transform: scale(0.98);
 }
 
@@ -4636,6 +4908,46 @@ footer {
   .right-sidebar {
     grid-template-columns: 1fr;
     gap: 14px;
+  }
+
+  /* Make expanded accordions scrollable on mobile */
+  .storage-category.expanded .category-items {
+    max-height: calc(100vh - 280px);
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+}
+
+/* Extra small screens like iPhone SE (375px) */
+@media (max-width: 400px) {
+  .mobile-bulk-action-bar {
+    padding: 8px 8px;
+    gap: 6px;
+    bottom: 78px;
+  }
+
+  .bulk-selection-count {
+    font-size: 0.7rem;
+    padding: 5px 8px;
+  }
+
+  .bulk-action-btn {
+    padding: 6px 8px;
+    font-size: 0.7rem;
+    gap: 3px;
+  }
+
+  .bulk-action-btn i {
+    font-size: 0.85rem;
+  }
+
+  .bulk-action-btn.clear-btn {
+    padding: 6px 6px;
+  }
+
+  /* Extra scrollable space on ultra-small screens */
+  .storage-category.expanded .category-items {
+    max-height: calc(100vh - 320px);
   }
 }
 
