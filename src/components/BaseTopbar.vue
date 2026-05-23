@@ -97,19 +97,31 @@ const handleNotifClick = async (notif: any) => {
   }
   showNotifPopup.value = false
 
+  // If the notification has a related entity (e.g., donation listing), navigate to it
+  const relatedId = (notif as any).related_entity_id || (notif as any).relatedEntityId
+  if (relatedId) {
+    router.push({ path: '/donations', query: { listing: relatedId } })
+    return
+  }
+
   const typeStr = (notif.type || '').toUpperCase()
   const msgStr = (notif.title || notif.message || notif.detail || '').toUpperCase()
 
-  if (typeStr.includes('EXPIRY') || msgStr.includes('EXPIR')) {
-    router.push('/inventory')
-  } else if (typeStr.includes('DONATION') || msgStr.includes('DONAT')) {
+  if (
+    typeStr.includes('DONATION') ||
+    msgStr.includes('DONAT') ||
+    msgStr.includes('LISTING') ||
+    msgStr.includes('REQUEST')
+  ) {
     router.push('/donations')
+  } else if (typeStr.includes('EXPIRY') || msgStr.includes('EXPIR')) {
+    router.push('/inventory')
   } else if (typeStr.includes('MEAL') || msgStr.includes('MEAL')) {
     router.push('/meal-plan')
   } else if (typeStr.includes('ACCOUNT') || msgStr.includes('ACCOUNT')) {
     router.push('/settings')
   } else {
-    alert(`Debug - Unhandled Notification:\nType: ${notif.type}\nMessage: ${notif.title || notif.message || notif.detail}`)
+    router.push('/donations')
   }
 }
 
