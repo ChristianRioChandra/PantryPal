@@ -1544,7 +1544,7 @@ function escapeHtml(str: string): string {
   )
 }
 
-function openConfirmationModal(action: 'delete' | 'finish', id: string) {
+function openConfirmationModal(action: 'delete' | 'finish' | 'bulk-delete', id: string) {
   confirmationAction.value = action
   confirmationItemId.value = id
   confirmationModalOpen.value = true
@@ -1581,7 +1581,7 @@ async function deleteItem(id: string) {
     }
 
     // Store the raw Firestore data before deletion for undo
-    const rawData = { id, ...item } as unknown as FoodItem
+    const rawData = { ...item } as unknown as FoodItem
     pendingUndoData.value = {
       items: [rawData],
       itemIds: [id],
@@ -1877,7 +1877,7 @@ async function bulkDeleteItems() {
     }
 
     // Store the raw Firestore data before deletion for undo
-    const rawItems = selectedItems.map((item) => ({ id: item.id, ...item } as unknown as FoodItem))
+    const rawItems = selectedItems.map((item) => ({ ...item } as unknown as FoodItem))
     pendingUndoData.value = {
       items: rawItems,
       itemIds: selectedItems.map((item) => item.id),
@@ -2283,17 +2283,18 @@ async function performUndo() {
 
     await Promise.all(
       items.map((item) => {
-        // item is InventoryItem-like; build addFoodItem payload
-        const { quantity, unit } = parseVolumeInput(item.volume || '')
+        // items are stored as InventoryItem cast to FoodItem; cast back to access UI fields
+        const invItem = item as unknown as InventoryItem
+        const { quantity, unit } = parseVolumeInput(invItem.volume || '')
         const payload = {
-          name: item.name,
+          name: invItem.name,
           quantity,
           unit,
-          expiryDate: item.expiryDate || new Date().toISOString().slice(0, 10),
-          foodType: item.foodType || 'Other',
-          type: (item.category as 'fridge' | 'pantry' | 'freezer' | 'countertop') || 'fridge',
-          storageLocation: item.location || (item.category ? (item.category[0].toUpperCase() + item.category.slice(1)) : 'Storage'),
-          notes: item.description || null,
+          expiryDate: invItem.expiryDate || new Date().toISOString().slice(0, 10),
+          foodType: invItem.foodType || 'Other',
+          type: (invItem.category as 'fridge' | 'pantry' | 'freezer' | 'countertop') || 'fridge',
+          storageLocation: invItem.location || (invItem.category ? (invItem.category.charAt(0).toUpperCase() + invItem.category.slice(1)) : 'Storage'),
+          notes: invItem.description || null,
         }
 
         return addFoodItem(currentUid.value!, payload)

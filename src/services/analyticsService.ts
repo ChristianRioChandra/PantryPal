@@ -14,7 +14,7 @@ import {
   getUserFoodItems,
   type FoodItem,
 } from './foodService'
-import { getUserListings, type DonationListing } from './donationService'
+import { getUserListings, ListingStatus, type DonationListing } from './donationService'
 import { getCategories, type Category } from './categoryService'
 
 // ─── Types ────────────────────────────────────────────────────────────────────

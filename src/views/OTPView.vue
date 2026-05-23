@@ -92,7 +92,7 @@ const handleInput = (index: number, e: Event) => {
       if (index < 5) inputs.value[index + 1]?.focus()
     } else {
       // Revert field to its original stored digit
-      target.value = otp.value[index]
+      target.value = otp.value[index] ?? ''
     }
     return
   }
