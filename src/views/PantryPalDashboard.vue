@@ -101,8 +101,48 @@
               <span>Try Out</span>
             </div>
             <div class="reco-label">Based on expiring items</div>
-            <div class="reco-item">Rendang — uses beef, coconut milk</div>
-            <div class="reco-item">Milk Pudding — uses milk, sugar</div>
+
+            <!-- Loading state -->
+            <div v-if="recoLoading" class="reco-loading">
+              <div class="reco-skeleton"></div>
+              <div class="reco-skeleton reco-skeleton--short"></div>
+            </div>
+
+            <!-- Error state -->
+            <div v-else-if="recoError" class="reco-error">
+              <i class="bi bi-exclamation-circle"></i>
+              <span>{{ recoError }}</span>
+            </div>
+
+            <!-- Recommendations from DB -->
+            <template v-else-if="liveRecommendations.length">
+              <div
+                v-for="rec in liveRecommendations"
+                :key="rec.id"
+                class="reco-item reco-item--live"
+              >
+                <div class="reco-item-left">
+                  <img
+                    v-if="rec.imageUrl"
+                    :src="rec.imageUrl"
+                    :alt="rec.name"
+                    class="reco-thumb"
+                  />
+                  <span v-else class="reco-emoji">{{ rec.icon }}</span>
+                </div>
+                <div class="reco-item-body">
+                  <div class="reco-item-name">{{ rec.name }}</div>
+                  <div class="reco-item-uses">uses {{ rec.uses }}</div>
+                </div>
+              </div>
+            </template>
+
+            <!-- Fallback suggestions -->
+            <template v-else>
+              <div v-for="rec in recommendedRecipes" :key="rec" class="reco-item">
+                {{ rec }}
+              </div>
+            </template>
           </div>
 
           <!-- Food Saved Progress -->
@@ -114,13 +154,29 @@
             <div class="progress-wrapper">
               <div class="progress-label">
                 <span>Progress</span>
-                <span class="progress-value">65%</span>
+                <span class="progress-value">{{ savedPercent }}%</span>
               </div>
               <div class="progress-bar">
-                <div class="progress-fill" style="width: 65%"></div>
+                <div class="progress-fill" :style="{ width: savedPercent + '%' }"></div>
               </div>
             </div>
-            <div class="progress-sub">13 of 20 items used or donated before expiry</div>
+            <div class="progress-stats">
+              <div class="progress-stat">
+                <span class="stat-num">{{ savedFinishedCount }}</span>
+                <span class="stat-label">Used</span>
+              </div>
+              <div class="progress-stat-sep">+</div>
+              <div class="progress-stat">
+                <span class="stat-num">{{ savedDonatedCount }}</span>
+                <span class="stat-label">Donated</span>
+              </div>
+              <div class="progress-stat-sep">=</div>
+              <div class="progress-stat">
+                <span class="stat-num stat-num--total">{{ savedTotal }}</span>
+                <span class="stat-label">of {{ savedTarget }}</span>
+              </div>
+            </div>
+            <div class="progress-sub">{{ savedTotal }} of {{ savedTarget }} items used or donated before expiry</div>
           </div>
         </div>
       </div>
@@ -152,12 +208,18 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { db } from '@/firebase'
 import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore'
+import { FoodActionKind } from '@/services/foodService'
 import { getMealPlanByDate, getMealPlanItems } from '@/services/mealPlanService'
+import {
+  fetchMealRecommendations,
+  type MealRecommendation,
+  type MealRecommendationRequestItem,
+} from '@/services/mealRecommendationService'
 import BaseSidebar from '@/components/BaseSidebar.vue'
 import BaseTopbar from '@/components/BaseTopbar.vue'
 import BaseRightSidebar from '@/components/BaseRightSidebar.vue'
@@ -227,6 +289,7 @@ const expiryAlerts = computed(() => {
       name: item.name,
       days: calculateDaysUntil(item.expiryDate)
     }))
+    .sort((a, b) => a.days - b.days) // Sort by urgency: expired and soonest-expiring first
     .slice(0, 3) // Show top 3 most urgent
 })
 
@@ -237,6 +300,91 @@ const expiringSoonCount = computed(() => {
     return days >= 0 && days <= 3
   }).length
 })
+
+// Recommendations based on expiring items (simple mapping)
+const recipeSuggestionsMap: Record<string, string[]> = {
+  Dairy: ['Milk Pudding', 'Creamy Pancakes'],
+  Fruits: ['Fruit Salad', 'Smoothie'],
+  Vegetables: ['Stir Fry Veggies', 'Roasted Veg Medley'],
+  Proteins: ['Rendang', 'Grilled Protein Bowl'],
+  Other: ['Mixed Stew', 'Quick Soup'],
+}
+
+const recommendedRecipes = computed(() => {
+  const expiring = inventoryItems.value
+    .filter(i => calculateDaysUntil(i.expiryDate) <= 3)
+    .slice(0, 3)
+
+  const recs: string[] = []
+  for (const item of expiring) {
+    const candidates = recipeSuggestionsMap[item.type] || recipeSuggestionsMap.Other || []
+    if (candidates && candidates.length > 0) {
+      recs.push(`${candidates[0]} — uses ${item.name.toLowerCase()}`)
+    }
+    if (recs.length >= 2) break
+  }
+  // fallback suggestions
+  if (recs.length === 0) return ['Try a stir-fry with leftovers', 'Make a simple soup']
+  return recs
+})
+
+// ─── Live Meal Recommendations ───────────────────────────────────────────────
+const liveRecommendations = ref<MealRecommendation[]>([])
+const recoLoading = ref(false)
+const recoError = ref<string | null>(null)
+
+const fetchLiveRecommendations = async () => {
+  const user = authStore.user
+  if (!user) return
+
+  // Only fetch if we have some inventory to work with
+  const expiringItems = inventoryItems.value.filter(item => {
+    const days = calculateDaysUntil(item.expiryDate)
+    return days <= 7
+  })
+
+  // Build the payload for the recommendation service
+  const inventoryPayload: MealRecommendationRequestItem[] = (
+    expiringItems.length ? expiringItems : inventoryItems.value
+  )
+    .slice(0, 10)
+    .map(item => ({
+      id: item.id,
+      name: item.name,
+      location: item.location,
+      expiry: item.expiryDate,
+      warning: item.warning,
+    }))
+
+  if (!inventoryPayload.length) {
+    liveRecommendations.value = []
+    return
+  }
+
+  recoLoading.value = true
+  recoError.value = null
+  try {
+    const today = new Date().toISOString().split('T')[0]!
+    const recs = await fetchMealRecommendations({ date: today, inventory: inventoryPayload })
+    liveRecommendations.value = recs ?? []
+  } catch (err) {
+    console.error('Dashboard recommendations error:', err)
+    recoError.value = 'Could not load suggestions'
+    liveRecommendations.value = []
+  } finally {
+    recoLoading.value = false
+  }
+}
+
+// Food saved this month metrics
+const savedFinishedCount = ref(0)
+const savedDonatedCount = ref(0)
+const savedTarget = ref(20)
+const savedTotal = computed(() => savedFinishedCount.value + savedDonatedCount.value)
+const savedPercent = computed(() => Math.min(100, Math.round((savedTotal.value / savedTarget.value) * 100)))
+
+let unsubscribeSavedFinished: (() => void) | null = null
+let unsubscribeSavedDonations: (() => void) | null = null
 
 // ─── Meal Plan (Dashboard) ────────────────────────────────────────────────────
 const dashboardDate = ref(new Date())
@@ -327,13 +475,66 @@ onMounted(() => {
       })
     })
 
+    // Trigger an initial recommendations fetch after inventory loads
+    setTimeout(() => fetchLiveRecommendations(), 1200)
+
+    // --- Saved this month: finished actions ---
+    if (unsubscribeSavedFinished) unsubscribeSavedFinished()
+    if (unsubscribeSavedDonations) unsubscribeSavedDonations()
+
+    const now = new Date()
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+    const startOfNextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1)
+
+    const finishedQ = query(
+      collection(db, 'food_actions'),
+      where('user_id', '==', authStore.user.uid),
+      where('kind', '==', FoodActionKind.FINISHED),
+      where('actioned_at', '>=', startOfMonth),
+      where('actioned_at', '<', startOfNextMonth),
+    )
+
+    unsubscribeSavedFinished = onSnapshot(finishedQ, (snap) => {
+      savedFinishedCount.value = snap.size
+    }, (err) => {
+      console.error('saved finished snapshot error', err)
+    })
+
+    // --- Saved this month: donations (donation listings created by user)
+    const donationQ = query(
+      collection(db, 'donationListings'),
+      where('user_id', '==', authStore.user.uid),
+      where('created_at', '>=', startOfMonth),
+      where('created_at', '<', startOfNextMonth),
+    )
+
+    unsubscribeSavedDonations = onSnapshot(donationQ, (snap) => {
+      savedDonatedCount.value = snap.size
+    }, (err) => {
+      console.error('saved donations snapshot error', err)
+    })
+
     // Initial fetch for meal plan
     fetchDashboardMealPlan()
   }
 })
 
+// Fetch recommendations once inventory data arrives (debounced)
+let recoTimer: ReturnType<typeof setTimeout> | null = null
+watch(
+  () => inventoryItems.value.length,
+  () => {
+    if (recoTimer) clearTimeout(recoTimer)
+    recoTimer = setTimeout(() => {
+      fetchLiveRecommendations()
+    }, 800)
+  },
+  { immediate: false }
+)
+
 onUnmounted(() => {
   if (unsubscribeInventory) unsubscribeInventory()
+  if (recoTimer) clearTimeout(recoTimer)
 })
 
 function handleAddFood() {
@@ -705,6 +906,101 @@ hr {
   font-weight: 500;
 }
 
+/* Live recommendation items with thumbnail */
+.reco-item--live {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+}
+
+.reco-item-left {
+  flex-shrink: 0;
+}
+
+.reco-thumb {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  object-fit: cover;
+}
+
+.reco-emoji {
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.6rem;
+  background: #f0f7ff;
+  border-radius: 12px;
+}
+
+.reco-item-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.reco-item-name {
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: #1e3a2f;
+  margin-bottom: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.reco-item-uses {
+  font-size: 0.75rem;
+  color: #7e95b0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Loading skeleton */
+.reco-loading {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.reco-skeleton {
+  height: 52px;
+  background: linear-gradient(90deg, #f0f4f8 25%, #e8edf4 50%, #f0f4f8 75%);
+  background-size: 200% 100%;
+  border-radius: 16px;
+  animation: shimmer 1.4s infinite;
+}
+
+.reco-skeleton--short {
+  height: 52px;
+  width: 80%;
+}
+
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* Error state */
+.reco-error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #91400a;
+  font-size: 0.85rem;
+  background: #fff7ed;
+  border-radius: 14px;
+  padding: 12px 14px;
+}
+
+.reco-error i {
+  font-size: 1rem;
+  color: #f59e0b;
+}
+
 .progress-wrapper {
   margin: 16px 0;
 }
@@ -730,14 +1026,58 @@ hr {
 
 .progress-fill {
   height: 100%;
-  background: #2c7a4d;
+  background: linear-gradient(90deg, #2c7a4d, #3da066);
   border-radius: 20px;
+  transition: width 0.6s ease;
+}
+
+/* Saved stats breakdown */
+.progress-stats {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin: 12px 0 6px;
+}
+
+.progress-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.stat-num {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: #1e3a2f;
+  line-height: 1;
+}
+
+.stat-num--total {
+  color: #2c7a4d;
+}
+
+.stat-label {
+  font-size: 0.68rem;
+  color: #7e95b0;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.progress-stat-sep {
+  font-size: 1rem;
+  color: #b0bec8;
+  font-weight: 600;
+  align-self: flex-start;
+  margin-top: 4px;
 }
 
 .progress-sub {
   font-size: 0.8rem;
   color: #6883a8;
   margin-top: 8px;
+  text-align: center;
 }
 
 /* ---------- RIGHT SIDEBAR ---------- */
